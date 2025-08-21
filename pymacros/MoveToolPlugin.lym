@@ -243,21 +243,29 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         if next:
             if self.x_value.hasFocus():
                 self.y_value.setFocus()
+                self.y_value.selectAll()
             elif self.y_value.hasFocus():
                 self.dx_value.setFocus()
+                self.dx_value.selectAll()
             elif self.dx_value.hasFocus():
                 self.dy_value.setFocus()
+                self.dy_value.selectAll()
             else:
                 self.x_value.setFocus()
+                self.x_value.selectAll()
         else:
             if self.x_value.hasFocus():
                 self.dy_value.setFocus()
+                self.dy_value.selectAll()
             elif self.dy_value.hasFocus():
                 self.dx_value.setFocus()
+                self.dx_value.selectAll()
             elif self.dx_value.hasFocus():
                 self.y_value.setFocus()
+                self.y_value.selectAll()
             else:
                 self.x_value.setFocus()        
+                self.x_value.selectAll()
         return True
 
     def keyPressEvent(self, event: pya.QKeyEvent):
