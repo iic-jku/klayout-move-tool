@@ -608,10 +608,10 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 # debug("key_event: tab!")
                 if self.selection is not None:
                     orig_pos = self.selection.position.to_dtype(self.dbu)
-                    delta = self.move_to_dpoint - self.move_from_dpoint
-                    self.setupDock.updatePositionValues(orig_pos.x + delta.x,
-                                                        orig_pos.y + delta.y,
+                    self.setupDock.updatePositionValues(orig_pos.x,
+                                                        orig_pos.y,
                                                         0.0, 0.0)
+                    self._clear_move_preview_markers()
                     self.setupDock.navigateToNextTextField()
                     return True
                 
