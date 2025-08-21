@@ -113,8 +113,8 @@ class MoveQuicklyToolSetupDock(pya.QDockWidget):
     def updateSelection(self, selection: Optional[MoveQuicklyToolSelection]):
         self.setupWidget.updateSelection(selection)
 
-    def updateMoveDelta(self, dx: float, dy: float):
-        self.setupWidget.updateMoveDelta(dx, dy)
+    def updatePositionValues(self, x: float, y: float, dx: float, dy: float):
+        self.setupWidget.updatePositionValues(x, y, dx, dy)
 
     def navigateToNextTextField(self):
         self.setupWidget.navigateToNextTextField()
@@ -232,7 +232,9 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         self.dx_value.setValue(0.0)
         self.dy_value.setValue(0.0)
 
-    def updateMoveDelta(self, dx: float, dy: float):
+    def updatePositionValues(self, x: float, y: float, dx: float, dy: float):
+        self.x_value.setValue(x)
+        self.y_value.setValue(y)
         self.dx_value.setValue(dx)
         self.dy_value.setValue(dy)
 
@@ -513,8 +515,11 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     self.move_to_dpoint = dpoint
                     
                     self.update_preview_markers()
+                    orig_pos = self.selection.position.to_dtype(self.dbu)
                     delta = self.move_to_dpoint - self.move_from_dpoint
-                    self.setupDock.updateMoveDelta(delta.x, delta.y)
+                    self.setupDock.updatePositionValues(orig_pos.x + delta.x,
+                                                        orig_pos.y + delta.y,
+                                                        delta.x, delta.y)
                     return True
         return False
 
@@ -602,6 +607,11 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             case pya.KeyCode.Tab:
                 # debug("key_event: tab!")
                 if self.selection is not None:
+                    orig_pos = self.selection.position.to_dtype(self.dbu)
+                    delta = self.move_to_dpoint - self.move_from_dpoint
+                    self.setupDock.updatePositionValues(orig_pos.x + delta.x,
+                                                        orig_pos.y + delta.y,
+                                                        0.0, 0.0)
                     self.setupDock.navigateToNextTextField()
                     return True
                 
@@ -614,9 +624,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         return False
         
     def commit_move(self, operation: MoveOperation):
+        self._clear_all_markers()
+        self.view.clear_selection()
         if self.selection is None:
-            self._clear_all_markers()
-            self.view.clear_selection()
             self.state = MoveQuicklyToolState.SELECTING
             return
             
@@ -636,7 +646,6 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self.view.commit()
             self.view.clear_selection()
             self.selection = None
-            self._clear_all_markers()
             # NOTE: do not deactivate, stay in M-mode!
             self.state = MoveQuicklyToolState.SELECTING
 
