@@ -1,8 +1,8 @@
 # KLayout Plugin: Move Quickly Tool
 
 <!--
-[![Watch the demo](doc/klayout-align-screenshot-demo-video.gif)](https://youtube.com/watch/v=sCo4Cf1f09Y)
->
+[![Watch the demo](doc/klayout-move-screenshot-demo-video.gif)](https://youtube.com/watch/v=sCo4Cf1f09Y)
+-->
 
 * Boost your layout productivity with quick moves of layout elements, such as
    * cell instances
@@ -22,7 +22,7 @@ After installation, this tool can be accessed through *Toolbar*→*Move quickly*
 - Assign the shortcut `M` to the path `edit_menu.mode_menu.Move_quickly`
 
 <p align="center">
-<img align="middle" src="doc/assign-shortcut.jpg" alt="Assign shortcut 'M' to the 'Align' tool" width="800"/>
+<img align="middle" src="doc/assign-shortcut.jpg" alt="Assign shortcut 'M' to the 'Move quickly' tool" width="800"/>
 </p>
 
 ## Installation using KLayout Package Manager
