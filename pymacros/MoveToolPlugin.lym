@@ -653,8 +653,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 class MoveQuicklyToolPluginFactory(pya.PluginFactory):
     def __init__(self):
         super().__init__()
-        iconPath = os.path.join(os.path.dirname(__file__), 'MoveToolIcon', '%s.png')
-        self.register(-1000, "Move Quickly Tool", "Move Quickly (M)", iconPath % "icon")
+        self.register(-1000, "Move Quickly Tool", "Move Quickly (M)", ':move_24px')
   
     def create_plugin(self, manager, root, view):
         return MoveQuicklyToolPlugin(view)
