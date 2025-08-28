@@ -112,7 +112,13 @@ class MoveQuicklyToolSelection:
     def as_transformees(self) -&gt; List[pya.Instance | pya.Shape]:
         tl = []
         tl += [o.instance for o in self.objects if isinstance(o, Instance)]
-        tl += [o.shape for o in self.objects if isinstance(o, ShapeOfInstance)]
+        for o in self.objects:
+            if not isinstance(o, ShapeOfInstance):
+                continue
+            if len(o.path) == 0:
+                tl += [o.shape]  # directly move this shape
+            else:  # the shape belongs to a subcell, never move the shape alone, always the whole cell
+                tl += [o.path[0].inst()]
         return tl
 
 
