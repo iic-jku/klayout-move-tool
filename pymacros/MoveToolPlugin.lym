@@ -529,6 +529,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     case MoveQuicklyToolState.DRAG_SELECTING:
                         self.drag_selection_to_dpoint = dpoint
                 
+                if self.drag_selection_from_dpoint is None:
+                    return False
+                
                 self.select_objects(pya.DBox(self.drag_selection_from_dpoint, self.drag_selection_to_dpoint), pya.LayoutView.SelectionMode.Add)
                 self.selection = self.selected_objects()
                 
