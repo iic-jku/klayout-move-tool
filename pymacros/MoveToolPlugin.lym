@@ -67,31 +67,59 @@ class MoveQuicklyToolState(StrEnum):
 
 
 @dataclass
+class SelectableObject:
+    path: List[pya.InstElement]
+    bbox: pya.Box
+
+
+@dataclass
+class ShapeOfInstance(SelectableObject):
+    shape: pya.Shape
+ 
+    
+@dataclass
+class Instance(SelectableObject):
+    instance: pya.Instance
+
+
+@dataclass
 class MoveQuicklyToolSelection:
-    shapes: List[pya.Shape]
-    instances: List[pya.Instance]
+    objects: List[Instance | ShapeOfInstance]
 
     def is_single_selection(self) -&gt; bool:
-        return len(self.shapes) + len(self.instances) == 1
+        return len(self.objects) == 1
         
     def is_multi_selection(self) -&gt; bool:
-        return len(self.shapes) + len(self.instances) &gt;= 2
+        return len(self.objects) &gt;= 2
         
     @cached_property
     def bbox(self) -&gt; pya.Box:
         r = pya.Region()
-        for s in self.shapes:
-            r.insert(s.bbox())
-        for i in self.instances:
-            r.insert(i.bbox())
+        for o in self.objects:
+            r.insert(o.bbox)
         return r.bbox()
-        
+    
     @cached_property
     def position(self) -&gt; pya.Point:
         return pya.Point(self.bbox.left, self.bbox.bottom)
+
+    def all_instances(self) -&gt; List[Instance]:
+        return [o for o in self.objects if isinstance(o, Instance)]
+
+    def all_shapes_of_instance(self) -&gt; List[ShapeOfInstance]:
+        return [o for o in self.objects if isinstance(o, ShapeOfInstance)]
         
     def as_transformees(self) -&gt; List[pya.Instance | pya.Shape]:
-        return self.shapes + self.instances
+        tl = []
+        tl += [o.instance for o in self.objects if isinstance(o, Instance)]
+        for o in self.objects:
+            if not isinstance(o, ShapeOfInstance):
+                continue
+            if len(o.path) == 0:
+                tl += [o.shape]  # directly move this shape
+            else:  # the shape belongs to a subcell, never move the shape alone, always the whole cell
+                tl += [o.path[0].inst()]
+        return tl
 
 
 @dataclass
@@ -184,9 +212,9 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
 
     def format_selection(self, selection: Optional[MoveQuicklyToolSelection]) -&gt; str:
         if selection is None or \
-           (len(selection.instances) == 0 and len(selection.shapes) == 0):
+           len(selection.objects) == 0:
             return "None"
-        def format_objects(singular: str, objects: List[pya.Shape | pya.Instance]):
+        def format_objects(singular: str, objects: List[Instance | ShapeOfInstance]):
             if objects is not None:
                 n = len(objects)
                 match n:
@@ -194,8 +222,9 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
                     case 1: return f"1 {singular}"
                     case _: return f"{n} {singular}s"
             return ''
-        instances = format_objects("instance", selection.instances)
-        shapes = format_objects("shape", selection.shapes)
+        
+        instances = format_objects("instance", selection.all_instances())
+        shapes = format_objects("shape", selection.all_shapes_of_instance())
         if instances == '':
             return shapes
         elif shapes == '':
@@ -338,16 +367,17 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self.setupDock.updateSelection(selection)
 
     def selected_objects(self) -&gt; Optional[MoveQuicklyToolSelection]:
-        i = []
-        s = []
+        so = []
         for o in self.view.each_object_selected():
             if o.is_cell_inst():
-                i += [o.inst()]
+                bbox = o.inst().bbox().transformed(o.trans())
+                so += [Instance(instance=o.inst(), path=o.path, bbox=bbox)]
             elif o.shape is not None:
-                s += [o.shape]
-        if not i and not s:
+                bbox = o.shape.bbox().transformed(o.trans())
+                so += [ShapeOfInstance(shape=o.shape, path=o.path, bbox=bbox)]
+        if len(so) == 0:
             return None
-        return MoveQuicklyToolSelection(instances=i, shapes=s)
+        return MoveQuicklyToolSelection(objects=so)
         
     def activated(self):
         view_is_visible = self.view.widget().isVisible()
@@ -400,7 +430,11 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self._clear_move_preview_markers()
         self._clear_drag_selection_markers()
         
-    def update_preview_markers(self):
+    def viewport_adjust(self, v: int) -&gt; int:
+        trans = pya.CplxTrans(self.view.viewport_trans(), self.dbu)
+        return v / trans.mag
+        
+    def update_move_preview_markers(self):
         self._clear_move_preview_markers()
         
         if self.selection is None:
@@ -419,6 +453,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 marker.vertex_size    = 0 
                 marker.dither_pattern = 1
                 marker.set(preview_box)
+                
                 self.move_preview_markers += [marker]
         
     def update_drag_selection_markers(self):
@@ -500,6 +535,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     case MoveQuicklyToolState.DRAG_SELECTING:
                         self.drag_selection_to_dpoint = dpoint
                 
+                if self.drag_selection_from_dpoint is None:
+                    return False
+                
                 self.select_objects(pya.DBox(self.drag_selection_from_dpoint, self.drag_selection_to_dpoint), pya.LayoutView.SelectionMode.Add)
                 self.selection = self.selected_objects()
                 
@@ -514,7 +552,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 if self.state == MoveQuicklyToolState.MOVING:
                     self.move_to_dpoint = dpoint
                     
-                    self.update_preview_markers()
+                    self.update_move_preview_markers()
                     orig_pos = self.selection.position.to_dtype(self.dbu)
                     delta = self.move_to_dpoint - self.move_from_dpoint
                     self.setupDock.updatePositionValues(orig_pos.x + delta.x,
