@@ -51,7 +51,7 @@ else:
             return str(self.value)
 
 
-DEBUG = False
+DEBUG = True  # False   # TODO: turn off
 
 # NOTE: always add an additional guard `if DEBUG: debug(f"...")` at each call site,
 #       otherwise the eager f-string eager evaluation can be costly,
@@ -322,6 +322,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.setupDock      = None
         self.view            = view
 
+        self._defer_timer = None
+
         self._state = MoveQuicklyToolState.INACTIVE
 
         self._selection: Optional[MoveQuicklyToolSelection] = None
@@ -388,6 +390,22 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             return None
         return MoveQuicklyToolSelection(objects=so)
         
+    def show_editor_options(self):
+        mw = pya.Application.instance().main_window()
+    
+        def on_timeout():
+            mw.call_menu('cm_edit_options')
+            self._defer_timer._destroy()
+            self._defer_timer = None
+        
+        # NOTE: if we directly call the Editor Options menu action
+        #       the GUI immediately will switch back to the Librariew view
+        #       so we enqueue it into the event loop
+        self._defer_timer = pya.QTimer(mw)
+        self._defer_timer.setSingleShot(True)
+        self._defer_timer.timeout = on_timeout
+        self._defer_timer.start(0)
+        
     def activated(self):
         view_is_visible = self.view.widget().isVisible()
         if DEBUG:
@@ -399,13 +417,19 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             return
 
         if not(self.setupDock):
-            mw   = pya.Application.instance().main_window()
+            mw = pya.Application.instance().main_window()
             self.setupDock = MoveQuicklyToolSetupDock(host=self)
             mw.addDockWidget(pya.Qt_DockWidgetArea.RightDockWidgetArea, self.setupDock)
         self.setupDock.show()
 
+        self.show_editor_options()
+
         self._state = MoveQuicklyToolState.SELECTING
         self.selection = self.selected_objects()
+            
+    def config_finalize(self):
+        if DEBUG:
+            debug("MoveQuicklyToolPlugin.config_finalize")
             
     def deactivated(self):
         if DEBUG:
@@ -427,6 +451,11 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         esc_key  = 16777216 
         keyPress = pya.QKeyEvent(pya.QKeyEvent.KeyPress, esc_key, pya.Qt.NoModifier)
         pya.QApplication.sendEvent(self.view.widget(), keyPress)        
+
+    def configure(self, name: str, value: str) -&gt; bool:
+        if DEBUG:
+            debug(f"MoveQuicklyToolPlugin.configure, name={name}, value={value}")
+        return False
 
     def _clear_move_preview_markers(self):
         for marker in self.move_preview_markers:
