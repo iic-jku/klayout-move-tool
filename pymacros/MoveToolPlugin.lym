@@ -51,7 +51,7 @@ else:
             return str(self.value)
 
 
-DEBUG = True  # False   # TODO: turn off
+DEBUG = False
 
 # NOTE: always add an additional guard `if DEBUG: debug(f"...")` at each call site,
 #       otherwise the eager f-string eager evaluation can be costly,
