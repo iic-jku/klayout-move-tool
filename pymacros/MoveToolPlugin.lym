@@ -53,7 +53,9 @@ else:
 
 DEBUG = False
 
-
+# NOTE: always add an additional guard `if DEBUG: debug(f"...")` at each call site,
+#       otherwise the eager f-string eager evaluation can be costly,
+#       even when debugging is turned off, especially in hot spots 
 def debug(*args, **kwargs):
     if DEBUG:
         print(*args, **kwargs)
@@ -300,10 +302,12 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         return True
 
     def keyPressEvent(self, event: pya.QKeyEvent):
-        debug(f"SetupDock.key_event: key={event.key()}, buttons={event.modifiers}")
+        if DEBUG:
+            debug(f"SetupDock.key_event: key={event.key()}, buttons={event.modifiers}")
         match event.key():
             case pya.KeyCode.Enter | pya.KeyCode.Return:
-                debug("keyPressEvent: enter!")
+                if DEBUG:
+                    debug("keyPressEvent: enter!")
                 op = MoveOperation(position=pya.DPoint(self.x_value.value, self.y_value.value),
                                    delta=pya.DVector(self.dx_value.value, self.dy_value.value))
                 self.host.commit_move(op)
@@ -346,7 +350,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 
     @state.setter
     def state(self, state: MoveQuicklyToolState):
-        debug(f"Transitioning from {self._state.value} to {state.value}")
+        if DEBUG:
+            debug(f"Transitioning from {self._state.value} to {state.value}")
         self._state = state
         if not(self.setupDock):
             pass
@@ -359,7 +364,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 
     @selection.setter
     def selection(self, selection: Optional[MoveQuicklyToolSelection]):
-        debug(f"setting selection to {selection}")
+        # # Hotspot, don't log this
+        # if DEBUG:
+        #     debug(f"setting selection to {selection}")
         self._selection = selection
         if not(self.setupDock):
             pass
@@ -381,10 +388,11 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         
     def activated(self):
         view_is_visible = self.view.widget().isVisible()
-        debug(f"MoveQuicklyToolPlugin.activated, "
-              f"for cell view {self.cell_view.cell_name}, "
-              f"is visible: {view_is_visible}")
-        debug(f"viewport trans: {self.view.viewport_trans()}")
+        if DEBUG:
+            debug(f"MoveQuicklyToolPlugin.activated, "
+                  f"for cell view {self.cell_view.cell_name}, "
+                  f"is visible: {view_is_visible}")
+            debug(f"viewport trans: {self.view.viewport_trans()}")
         if not view_is_visible:
             return
 
@@ -398,7 +406,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.selection = self.selected_objects()
             
     def deactivated(self):
-        debug("MoveQuicklyToolPlugin.deactivated")
+        if DEBUG:
+            debug("MoveQuicklyToolPlugin.deactivated")
         
         self._clear_all_markers()
         self.selection = None
@@ -411,7 +420,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self.setupDock.hide()
 
     def deactivate(self):
-        debug("MoveQuicklyToolPlugin.deactivate")
+        if DEBUG:
+            debug("MoveQuicklyToolPlugin.deactivate")
         esc_key  = 16777216 
         keyPress = pya.QKeyEvent(pya.QKeyEvent.KeyPress, esc_key, pya.Qt.NoModifier)
         pya.QApplication.sendEvent(self.view.widget(), keyPress)        
@@ -487,9 +497,11 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             if lref.visible and lref.valid:
                 if lref.layer_index() == -1:  # hidden by the user
                     continue
-                # print(f"layer is visible, name={lref.name}, idx={lref.layer_index()}, "
-                #       f"marked={lref.marked} cellview={lref.cellview()}, "
-                #      f"source={lref.source}")
+                # # Hotspot, don't log this
+                # if DEBUG:
+                #     debug(f"layer is visible, name={lref.name}, idx={lref.layer_index()}, "
+                #           f"marked={lref.marked} cellview={lref.cellview()}, "
+                #           f"source={lref.source}")
                 idxs.append(lref.layer_index())
         return idxs
     
@@ -521,7 +533,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         
     def mouse_moved_event(self, dpoint: pya.DPoint, buttons: int, prio: bool):
         if prio:
-            # print(f"mouse moved event, p={dpoint}, buttons={buttons}, prio={prio}")
+            # # Hotspot, don't log this
+            # if DEBUG:
+            #     debug(f"mouse moved event, p={dpoint}, buttons={buttons}, prio={prio}")
             
             # NOTE: dragging will change the selection
             #       clicking (select object) and moving without dragging will show the move preview
@@ -548,7 +562,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 self._clear_move_preview_markers()
                 return True
             else:
-                # print(f"mouse drag event, p={dpoint}, buttons={buttons}, prio={prio}")
+                # # Hotspot, don't log this
+                # if DEBUG:
+                #     debug(f"mouse drag event, p={dpoint}, buttons={buttons}, prio={prio}")
                 if self.state == MoveQuicklyToolState.MOVING:
                     self.move_to_dpoint = dpoint
                     
@@ -567,7 +583,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         return False
 
     def mouse_button_released_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -&gt; bool:
-        # print(f"mouse button released event, p={dpoint}, buttons={buttons}, prio={prio}")
+        if DEBUG:
+            debug(f"mouse button released event, p={dpoint}, buttons={buttons}, prio={prio}")
         
         if self.is_dragging:
             self.is_dragging = False
@@ -632,18 +649,21 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         return False
         
     def key_event(self, key: int, buttons: int):
-        # debug(f"key_event: key={key}, buttons={buttons}")
+        if DEBUG:
+            debug(f"key_event: key={key}, buttons={buttons}")
         
         if buttons &amp; pya.ButtonState.ShiftKey and \
            self.state == MoveQuicklyToolState.MOVING:
-            debug("key_event: shift cancels moving!")
+            if DEBUG:
+                debug("key_event: shift cancels moving!")
             self.state = MoveQuicklyToolState.SELECTING
             self._clear_move_preview_markers()
             return True
                 
         match key:
             case pya.KeyCode.Tab:
-                # debug("key_event: tab!")
+                if DEBUG:
+                    debug("key_event: tab!")
                 if self.selection is not None:
                     orig_pos = self.selection.position.to_dtype(self.dbu)
                     self.setupDock.updatePositionValues(orig_pos.x,
@@ -654,7 +674,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     return True
                 
             case pya.KeyCode.Enter | pya.KeyCode.Return:
-                # debug("key_event: enter!")
+                if DEBUG:
+                    debug("key_event: enter!")
                 if self.selection is not None:
                     self.commit_move()
                     return True
@@ -672,8 +693,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         dx = operation.position.x + operation.delta.x - origin_pos.x
         dy = operation.position.y + operation.delta.y - origin_pos.y
 
-        debug(f"commit_move: origin_pos={origin_pos}, self.selection.position={self.selection.position}, "
-              f"operation.position={operation.position}, operation.delta={operation.delta}")
+        if DEBUG:
+            debug(f"commit_move: origin_pos={origin_pos}, self.selection.position={self.selection.position}, "
+                  f"operation.position={operation.position}, operation.delta={operation.delta}")
             
         self.view.transaction("move quickly")
         try:
