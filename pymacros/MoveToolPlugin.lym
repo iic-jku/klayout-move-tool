@@ -376,12 +376,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
     def selected_objects(self) -&gt; Optional[MoveQuicklyToolSelection]:
         so = []
         for o in self.view.each_object_selected():
-            if o.is_cell_inst():
-                bbox = o.inst().bbox().transformed(o.trans())
-                so += [Instance(instance=o.inst(), path=o.path, bbox=bbox)]
-            elif o.shape is not None:
-                bbox = o.shape.bbox().transformed(o.trans())
-                so += [ShapeOfInstance(shape=o.shape, path=o.path, bbox=bbox)]
+            if len(o.path) == 0:  # a shape within the same cell has to be aligned
+                if o.shape is not None:
+                    bbox = o.shape.bbox().transformed(o.source_trans())
+                    so += [ShapeOfInstance(shape=o.shape, path=o.path, bbox=bbox)]
+            else:  # the instance/shape is within subcells, we want to move only the top-most instance!
+                inst = o.path[0].inst()
+                bbox = inst.bbox()
+                so += [Instance(instance=inst, path=o.path[0:1], bbox=bbox)]
         if len(so) == 0:
             return None
         return MoveQuicklyToolSelection(objects=so)
