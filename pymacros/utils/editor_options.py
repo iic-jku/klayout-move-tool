@@ -75,12 +75,21 @@ class AngleMode(StrEnum):
 class EditorOptions:
     def __init__(self, view: pya.LayoutView):
         self.view = view
-        
-        self._edit_connect_angle_mode = AngleMode(view.get_config('edit-connect-angle-mode'))
-        self._edit_move_angle_mode = AngleMode(view.get_config('edit-move-angle-mode'))
+
+        for name in (
+            'edit-grid', 
+            'edit-snap-objects-to-grid', 
+            'edit-connect-angle-mode', 
+            'edit-move-angle-mode',
+        ):
+            self.plugin_configure(name, view.get_config(name))
 
     def plugin_configure(self, name: str, value: str):
-        if name == 'edit-connect-angle-mode':
+        if name == 'edit-grid':
+            self._edit_grid = float(value)
+        elif name == 'edit-snap-objects-to-grid':
+            self._edit_snap_objects_to_grid = value == 'true'
+        elif name == 'edit-connect-angle-mode':
             self._edit_connect_angle_mode = AngleMode(value)
         elif name == 'edit-move-angle-mode':
             self._edit_move_angle_mode = AngleMode(value)
@@ -117,6 +126,14 @@ class EditorOptions:
         cls._defer_timer.timeout = on_timeout
         cls._defer_timer.start(0)
                 
-    def constrain_move(self, origin: pya.DPoint, destination: pya.DPoint) -> pya.DPoint:
-        p = self.edit_move_angle_mode.constrain_angle(origin=origin, destination=destination)
-        return p
+    def snap_to_grid(self, point: pya.DPoint) -> pya.DPoint:
+        return pya.DPoint(round(point.x / self._edit_grid) * self._edit_grid,
+                          round(point.y / self._edit_grid) * self._edit_grid)
+    
+    def snap_to_grid_if_necessary(self, point: pya.DPoint) -> pya.DPoint:
+        if self._edit_snap_objects_to_grid:
+            return self.snap_to_grid(point=point)
+        return point
+    
+    def constrain_angle(self, origin: pya.DPoint, destination: pya.DPoint) -> pya.DPoint:
+        return self.edit_move_angle_mode.constrain_angle(origin=origin, destination=destination)

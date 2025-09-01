@@ -17,6 +17,7 @@
 #--------------------------------------------------------------------------------
 
 from __future__ import annotations
+from abc import abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
 from typing import *
@@ -28,8 +29,6 @@ import pya
 from utils.debugging import debug, Debugging
 from utils.editor_options import EditorOptions
 from utils.str_enum_compat import StrEnum
-
-
 
 
 class MoveQuicklyToolState(StrEnum):
@@ -97,8 +96,31 @@ class MoveQuicklyToolSelection:
 
 @dataclass
 class MoveOperation:
-    position: pya.DPoint
-    delta: pya.DVector
+    @abstractmethod
+    def effective_delta(self) -> pya.DVector:
+        raise NotImplementedError()
+
+
+@dataclass
+class MouseMoveOperation(MoveOperation):
+    original_position: pya.DPoint
+    snapped_position: pya.DPoint
+    from_cursor: pya.DPoint                # original cursor
+    to_cursor: pya.DPoint                  # original cursor
+    snapped_cursor_delta: pya.DVector      # snap-to-grid cursor delta
+    
+    def effective_delta(self) -> pya.DVector:
+        # NOTE: because of snap-to-grid, we might have to correct the original position of the selection
+        delta = self.snapped_position - self.original_position + self.snapped_cursor_delta
+        return delta
+
+
+@dataclass
+class TextMoveOperation(MoveOperation):
+    x: float
+    y: float
+    dx: float
+    dy: float
 
 
 class MoveQuicklyToolSetupDock(pya.QDockWidget):
@@ -279,8 +301,9 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
             case pya.KeyCode.Enter | pya.KeyCode.Return:
                 if Debugging.DEBUG:
                     debug("keyPressEvent: enter!")
-                op = MoveOperation(position=pya.DPoint(self.x_value.value, self.y_value.value),
-                                   delta=pya.DVector(self.dx_value.value, self.dy_value.value))
+                    
+                op = TextMoveOperation(self.x_value.value, self.y_value.value,
+                                       self.dx_value.value, self.dy_value.value)
                 self.host.commit_move(op)
                 event.accept()
                 return
@@ -308,6 +331,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.drag_selection_to_dpoint = None
         self.move_from_dpoint = None
         self.move_to_dpoint = None
+        self.move_operation = None
 
     @property
     def cell_view(self) -> pya.CellView:
@@ -445,7 +469,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             case MoveQuicklyToolState.INACTIVE | MoveQuicklyToolState.SELECTING | MoveQuicklyToolState.DRAG_SELECTING:
                 return
             case MoveQuicklyToolState.MOVING:
-                delta = self.move_to_dpoint - self.move_from_dpoint                                                
+                delta = self.move_operation.effective_delta()
                 preview_box = self.selection.bbox.to_dtype(self.dbu).moved(delta)
                 
                 marker = pya.Marker(self.view)
@@ -557,16 +581,26 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 # if Debugging.DEBUG:
                 #     debug(f"mouse drag event, p={dpoint}, buttons={buttons}, prio={prio}")
                 if self.state == MoveQuicklyToolState.MOVING:
-                    self.move_to_dpoint = self.editor_options.constrain_move(origin=self.move_from_dpoint, destination=dpoint)
+                    snapped_from_cursor = self.editor_options.snap_to_grid_if_necessary(self.move_from_dpoint)
+                    snapped_to_cursor = self.editor_options.snap_to_grid_if_necessary(dpoint)
+                    constrained_to_cursor = self.editor_options.constrain_angle(origin=snapped_from_cursor, destination=snapped_to_cursor)
                     
-                    self.update_move_preview_markers()
-                    
-                    delta = self.move_to_dpoint - self.move_from_dpoint
+                    delta = constrained_to_cursor - snapped_from_cursor
                     
                     orig_pos = self.selection.position.to_dtype(self.dbu)
-                    self.setupDock.updatePositionValues(orig_pos.x + delta.x,
-                                                        orig_pos.y + delta.y,
-                                                        delta.x, delta.y)
+                    pos = self.editor_options.snap_to_grid_if_necessary(orig_pos)
+                    
+                    self.move_operation = MouseMoveOperation(original_position=orig_pos, 
+                                                             snapped_position=pos, 
+                                                             from_cursor=self.move_from_dpoint,
+                                                             to_cursor=dpoint,
+                                                             snapped_cursor_delta=delta)
+                    self.setupDock.updatePositionValues(pos.x + delta.x,
+                                                        pos.y + delta.y,
+                                                        delta.x, 
+                                                        delta.y)
+                    self.update_move_preview_markers()
+                    
                     return True
         return False
 
@@ -630,9 +664,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                             self._clear_all_markers()
                             self.state = MoveQuicklyToolState.SELECTING
                         elif self.selection is not None:
-                            delta = self.move_to_dpoint - self.move_from_dpoint
-                            origin_pos = self.selection.position.to_dtype(self.dbu)
-                            self.commit_move(MoveOperation(position=origin_pos, delta=delta))
+                            self.commit_move(self.move_operation)
                         return True                        
             elif buttons in [pya.ButtonState.RightButton, pya.ButtonState.RightButton]:
                 self._clear_all_markers()
@@ -684,17 +716,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self.state = MoveQuicklyToolState.SELECTING
             return
             
-        origin_pos = self.selection.position.to_dtype(self.dbu)
-        dx = operation.position.x + operation.delta.x - origin_pos.x
-        dy = operation.position.y + operation.delta.y - origin_pos.y
+        delta = operation.effective_delta()
 
         if Debugging.DEBUG:
-            debug(f"commit_move: origin_pos={origin_pos}, self.selection.position={self.selection.position}, "
-                  f"operation.position={operation.position}, operation.delta={operation.delta}")
+            debug(f"commit_move: operation={operation}")
             
         self.view.transaction("move quickly")
         try:
-            trans = pya.DTrans(dx, dy)
+            trans = pya.DTrans(delta.x, delta.y)
             for t in self.selection.as_transformees():
                 t.transform(trans)
         finally:
