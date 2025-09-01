@@ -557,11 +557,13 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 # if Debugging.DEBUG:
                 #     debug(f"mouse drag event, p={dpoint}, buttons={buttons}, prio={prio}")
                 if self.state == MoveQuicklyToolState.MOVING:
-                    self.move_to_dpoint = dpoint
+                    self.move_to_dpoint = self.editor_options.constrain_move(origin=self.move_from_dpoint, destination=dpoint)
                     
                     self.update_move_preview_markers()
-                    orig_pos = self.selection.position.to_dtype(self.dbu)
+                    
                     delta = self.move_to_dpoint - self.move_from_dpoint
+                    
+                    orig_pos = self.selection.position.to_dtype(self.dbu)
                     self.setupDock.updatePositionValues(orig_pos.x + delta.x,
                                                         orig_pos.y + delta.y,
                                                         delta.x, delta.y)
@@ -617,6 +619,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                         if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
                             self.state = MoveQuicklyToolState.MOVING
                             self.move_from_dpoint = dpoint
+                        if Debugging.DEBUG:
+                            debug(f"State {MoveQuicklyToolState.SELECTING} → self.state: selection={self.selection}, move_from_dpoint={self.move_from_dpoint}")
                         return True                        
                     case MoveQuicklyToolState.DRAG_SELECTING:
                         pass
