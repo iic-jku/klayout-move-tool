@@ -1,21 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<klayout-macro>
- <description/>
- <version/>
- <category>pymacros</category>
- <prolog/>
- <epilog/>
- <doc/>
- <autorun>true</autorun>
- <autorun-early>false</autorun-early>
- <priority>0</priority>
- <shortcut/>
- <show-in-menu>false</show-in-menu>
- <group-name/>
- <menu-path/>
- <interpreter>python</interpreter>
- <dsl-interpreter-name/>
- <text># --------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 # SPDX-FileCopyrightText: 2025 Martin Jan Köhler
 #
 # This program is free software: you can redistribute it and/or modify
@@ -29,7 +12,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program. If not, see &lt;http://www.gnu.org/licenses/&gt;.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 # SPDX-License-Identifier: GPL-3.0-or-later
 #--------------------------------------------------------------------------------
 
@@ -42,23 +25,11 @@ import sys
 
 import pya
 
-if sys.version_info &gt;= (3, 11):
-    from enum import StrEnum
-else:
-    from enum import Enum
-    class StrEnum(str, Enum):
-        def __str__(self) -&gt; str:
-            return str(self.value)
+from utils.debugging import debug, Debugging
+from utils.editor_options import EditorOptions
+from utils.str_enum_compat import StrEnum
 
 
-DEBUG = False
-
-# NOTE: always add an additional guard `if DEBUG: debug(f"...")` at each call site,
-#       otherwise the eager f-string eager evaluation can be costly,
-#       even when debugging is turned off, especially in hot spots 
-def debug(*args, **kwargs):
-    if DEBUG:
-        print(*args, **kwargs)
 
 
 class MoveQuicklyToolState(StrEnum):
@@ -88,30 +59,30 @@ class Instance(SelectableObject):
 class MoveQuicklyToolSelection:
     objects: List[Instance | ShapeOfInstance]
 
-    def is_single_selection(self) -&gt; bool:
+    def is_single_selection(self) -> bool:
         return len(self.objects) == 1
         
-    def is_multi_selection(self) -&gt; bool:
-        return len(self.objects) &gt;= 2
+    def is_multi_selection(self) -> bool:
+        return len(self.objects) >= 2
         
     @cached_property
-    def bbox(self) -&gt; pya.Box:
+    def bbox(self) -> pya.Box:
         r = pya.Region()
         for o in self.objects:
             r.insert(o.bbox)
         return r.bbox()
     
     @cached_property
-    def position(self) -&gt; pya.Point:
+    def position(self) -> pya.Point:
         return pya.Point(self.bbox.left, self.bbox.bottom)
 
-    def all_instances(self) -&gt; List[Instance]:
+    def all_instances(self) -> List[Instance]:
         return [o for o in self.objects if isinstance(o, Instance)]
 
-    def all_shapes_of_instance(self) -&gt; List[ShapeOfInstance]:
+    def all_shapes_of_instance(self) -> List[ShapeOfInstance]:
         return [o for o in self.objects if isinstance(o, ShapeOfInstance)]
         
-    def as_transformees(self) -&gt; List[pya.Instance | pya.Shape]:
+    def as_transformees(self) -> List[pya.Instance | pya.Shape]:
         tl = []
         tl += [o.instance for o in self.objects if isinstance(o, Instance)]
         for o in self.objects:
@@ -154,22 +125,22 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
     def __init__(self, host: MoveQuicklyToolPlugin):
         super().__init__()
         self.host = host
-        self.selection_label = pya.QLabel('&lt;span style="text-decoration: underline;"&gt;Selection:&lt;/span&gt;')
+        self.selection_label = pya.QLabel('<span style="text-decoration: underline;">Selection:</span>')
         self.selection_value = pya.QLabel('None')
         
-        self.x_label = pya.QLabel('&lt;span style="text-decoration: underline;"&gt;X:&lt;/span&gt;')
+        self.x_label = pya.QLabel('<span style="text-decoration: underline;">X:</span>')
         self.x_value = pya.QDoubleSpinBox()
         self.x_unit = pya.QLabel('µm')
         
-        self.y_label = pya.QLabel('&lt;span style="text-decoration: underline;"&gt;Y:&lt;/span&gt;')
+        self.y_label = pya.QLabel('<span style="text-decoration: underline;">Y:</span>')
         self.y_value = pya.QDoubleSpinBox()
         self.y_unit = pya.QLabel('µm')
         
-        self.dx_label = pya.QLabel('&lt;span style="text-decoration: underline;"&gt;dX:&lt;/span&gt;')
+        self.dx_label = pya.QLabel('<span style="text-decoration: underline;">dX:</span>')
         self.dx_value = pya.QDoubleSpinBox()
         self.dx_unit = pya.QLabel('µm')
 
-        self.dy_label = pya.QLabel('&lt;span style="text-decoration: underline;"&gt;dY:&lt;/span&gt;')
+        self.dy_label = pya.QLabel('<span style="text-decoration: underline;">dY:</span>')
         self.dy_value = pya.QDoubleSpinBox()
         self.dy_unit = pya.QLabel('µm')
         
@@ -182,7 +153,7 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
             sb.setSizePolicy(spin_box_size_policy)
         
         self.spacerItem = pya.QSpacerItem(0, 20, pya.QSizePolicy.Minimum, pya.QSizePolicy.Fixed)
-        self.cancelInfoLabel = pya.QLabel('&lt;span style="color: grey;"&gt;&lt;span style="text-decoration: underline;"&gt;Hint:&lt;/span&gt; Esc to cancel&lt;/span&gt;')
+        self.cancelInfoLabel = pya.QLabel('<span style="color: grey;"><span style="text-decoration: underline;">Hint:</span> Esc to cancel</span>')
         
         self.layout = pya.QGridLayout()
         self.layout.setSpacing(5)
@@ -212,7 +183,7 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
     def updateState(self, state: MoveQuicklyToolState):
         return
 
-    def format_selection(self, selection: Optional[MoveQuicklyToolSelection]) -&gt; str:
+    def format_selection(self, selection: Optional[MoveQuicklyToolSelection]) -> str:
         if selection is None or \
            len(selection.objects) == 0:
             return "None"
@@ -272,7 +243,7 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
     def navigateToNextTextField(self):
         self.focusNextPrevChild(next=True)
 
-    def focusNextPrevChild(self, next: bool) -&gt; bool:
+    def focusNextPrevChild(self, next: bool) -> bool:
         if next:
             if self.x_value.hasFocus():
                 self.y_value.setFocus()
@@ -302,11 +273,11 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         return True
 
     def keyPressEvent(self, event: pya.QKeyEvent):
-        if DEBUG:
+        if Debugging.DEBUG:
             debug(f"SetupDock.key_event: key={event.key()}, buttons={event.modifiers}")
         match event.key():
             case pya.KeyCode.Enter | pya.KeyCode.Return:
-                if DEBUG:
+                if Debugging.DEBUG:
                     debug("keyPressEvent: enter!")
                 op = MoveOperation(position=pya.DPoint(self.x_value.value, self.y_value.value),
                                    delta=pya.DVector(self.dx_value.value, self.dy_value.value))
@@ -330,29 +301,33 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.move_preview_markers = []
         self.drag_selection_markers = []
         
+        self.editor_options = None
+        
         self.is_dragging = False
-        self.drag_from_dpoint = None
-        self.drag_to_dpoint = None
+        self.drag_selection_from_dpoint = None
+        self.drag_selection_to_dpoint = None
+        self.move_from_dpoint = None
+        self.move_to_dpoint = None
 
     @property
-    def cell_view(self) -&gt; pya.CellView:
+    def cell_view(self) -> pya.CellView:
         return self.view.active_cellview()
 
     @property
-    def layout(self) -&gt; pya.Layout:
+    def layout(self) -> pya.Layout:
         return self.cell_view.layout()
         
     @property
-    def dbu(self) -&gt; float:
+    def dbu(self) -> float:
         return self.layout.dbu
 
     @property
-    def state(self) -&gt; MoveQuicklyToolState:
+    def state(self) -> MoveQuicklyToolState:
         return self._state
 
     @state.setter
     def state(self, state: MoveQuicklyToolState):
-        if DEBUG:
+        if Debugging.DEBUG:
             debug(f"Transitioning from {self._state.value} to {state.value}")
         self._state = state
         if not(self.setupDock):
@@ -361,13 +336,13 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self.setupDock.updateState(state)
             
     @property
-    def selection(self) -&gt; MoveQuicklyToolSelection:
+    def selection(self) -> MoveQuicklyToolSelection:
         return self._selection
 
     @selection.setter
     def selection(self, selection: Optional[MoveQuicklyToolSelection]):
         # # Hotspot, don't log this
-        # if DEBUG:
+        # if Debugging.DEBUG:
         #     debug(f"setting selection to {selection}")
         self._selection = selection
         if not(self.setupDock):
@@ -375,7 +350,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         else:
             self.setupDock.updateSelection(selection)
 
-    def selected_objects(self) -&gt; Optional[MoveQuicklyToolSelection]:
+    def selected_objects(self) -> Optional[MoveQuicklyToolSelection]:
         so = []
         for o in self.view.each_object_selected():
             if len(o.path) == 0:  # a shape within the same cell has to be aligned
@@ -390,25 +365,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             return None
         return MoveQuicklyToolSelection(objects=so)
         
-    def show_editor_options(self):
-        mw = pya.Application.instance().main_window()
-    
-        def on_timeout():
-            mw.call_menu('cm_edit_options')
-            self._defer_timer._destroy()
-            self._defer_timer = None
-        
-        # NOTE: if we directly call the Editor Options menu action
-        #       the GUI immediately will switch back to the Librariew view
-        #       so we enqueue it into the event loop
-        self._defer_timer = pya.QTimer(mw)
-        self._defer_timer.setSingleShot(True)
-        self._defer_timer.timeout = on_timeout
-        self._defer_timer.start(0)
-        
     def activated(self):
         view_is_visible = self.view.widget().isVisible()
-        if DEBUG:
+        if Debugging.DEBUG:
             debug(f"MoveQuicklyToolPlugin.activated, "
                   f"for cell view {self.cell_view.cell_name}, "
                   f"is visible: {view_is_visible}")
@@ -422,17 +381,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             mw.addDockWidget(pya.Qt_DockWidgetArea.RightDockWidgetArea, self.setupDock)
         self.setupDock.show()
 
-        self.show_editor_options()
+        self.editor_options = EditorOptions(view=self.view)
+        EditorOptions.show_editor_options()
 
         self._state = MoveQuicklyToolState.SELECTING
         self.selection = self.selected_objects()
             
-    def config_finalize(self):
-        if DEBUG:
-            debug("MoveQuicklyToolPlugin.config_finalize")
-            
     def deactivated(self):
-        if DEBUG:
+        if Debugging.DEBUG:
             debug("MoveQuicklyToolPlugin.deactivated")
         
         self._clear_all_markers()
@@ -441,20 +397,24 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 
         self._state = MoveQuicklyToolState.INACTIVE
         
+        self.editor_options = None
+        
         self.ungrab_mouse()
         if self.setupDock:
             self.setupDock.hide()
 
     def deactivate(self):
-        if DEBUG:
+        if Debugging.DEBUG:
             debug("MoveQuicklyToolPlugin.deactivate")
         esc_key  = 16777216 
         keyPress = pya.QKeyEvent(pya.QKeyEvent.KeyPress, esc_key, pya.Qt.NoModifier)
         pya.QApplication.sendEvent(self.view.widget(), keyPress)        
 
-    def configure(self, name: str, value: str) -&gt; bool:
-        if DEBUG:
+    def configure(self, name: str, value: str) -> bool:
+        if Debugging.DEBUG:
             debug(f"MoveQuicklyToolPlugin.configure, name={name}, value={value}")
+        if self.editor_options is not None:
+            self.editor_options.plugin_configure(name, value)
         return False
 
     def _clear_move_preview_markers(self):
@@ -471,7 +431,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self._clear_move_preview_markers()
         self._clear_drag_selection_markers()
         
-    def viewport_adjust(self, v: int) -&gt; int:
+    def viewport_adjust(self, v: int) -> int:
         trans = pya.CplxTrans(self.view.viewport_trans(), self.dbu)
         return v / trans.mag
         
@@ -515,21 +475,21 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 self.drag_selection_markers += [marker]
         
     def select_object_at(self, dpoint: pya.DPoint, buttons: int):
-        if buttons &amp; pya.ButtonState.ShiftKey:
+        if buttons & pya.ButtonState.ShiftKey:
             selection_mode = pya.LayoutView.SelectionMode.Add
         else:
             selection_mode = pya.LayoutView.SelectionMode.Replace
         self.view.select_from(dpoint, selection_mode)
         self.selection = self.selected_objects()
        
-    def visible_layer_indexes(self) -&gt; List[int]:
+    def visible_layer_indexes(self) -> List[int]:
         idxs = []
         for lref in self.view.each_layer():
             if lref.visible and lref.valid:
                 if lref.layer_index() == -1:  # hidden by the user
                     continue
                 # # Hotspot, don't log this
-                # if DEBUG:
+                # if Debugging.DEBUG:
                 #     debug(f"layer is visible, name={lref.name}, idx={lref.layer_index()}, "
                 #           f"marked={lref.marked} cellview={lref.cellview()}, "
                 #           f"source={lref.source}")
@@ -542,7 +502,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         for top_cell in self.layout.top_cells():
             if self.cell_view.is_cell_hidden(top_cell):
                 continue
-            if self.view.max_hier_levels &gt;= 1:
+            if self.view.max_hier_levels >= 1:
                 iter = top_cell.begin_instances_rec_overlapping(search_box)
                 iter.min_depth = max(self.view.min_hier_levels-1, 0)
                 iter.max_depth = max(self.view.max_hier_levels-1, 0)
@@ -552,7 +512,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     if not hidden:
                         self.view.select_from(inst.bbox().to_dtype(self.dbu), selection_mode)
                     iter.next()
-            if self.view.max_hier_levels &gt;= 1:
+            if self.view.max_hier_levels >= 1:
                 for lyr in visible_layer_indexes:
                     iter = top_cell.begin_shapes_rec_overlapping(lyr, search_box)
                     iter.min_depth = max(self.view.min_hier_levels-1, 0)
@@ -565,13 +525,13 @@ class MoveQuicklyToolPlugin(pya.Plugin):
     def mouse_moved_event(self, dpoint: pya.DPoint, buttons: int, prio: bool):
         if prio:
             # # Hotspot, don't log this
-            # if DEBUG:
+            # if Debugging.DEBUG:
             #     debug(f"mouse moved event, p={dpoint}, buttons={buttons}, prio={prio}")
             
             # NOTE: dragging will change the selection
             #       clicking (select object) and moving without dragging will show the move preview
             
-            if buttons &amp; pya.ButtonState.LeftButton:  # drag selection
+            if buttons & pya.ButtonState.LeftButton:  # drag selection
                 match self.state:
                     case MoveQuicklyToolState.INACTIVE | MoveQuicklyToolState.SELECTING | MoveQuicklyToolState.MOVING:
                         self.state = MoveQuicklyToolState.DRAG_SELECTING
@@ -588,13 +548,13 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 
                 self.update_drag_selection_markers()
                 return True
-            elif buttons &amp; pya.ButtonState.ShiftKey:
+            elif buttons & pya.ButtonState.ShiftKey:
                 state = MoveQuicklyToolState.SELECTING
                 self._clear_move_preview_markers()
                 return True
             else:
                 # # Hotspot, don't log this
-                # if DEBUG:
+                # if Debugging.DEBUG:
                 #     debug(f"mouse drag event, p={dpoint}, buttons={buttons}, prio={prio}")
                 if self.state == MoveQuicklyToolState.MOVING:
                     self.move_to_dpoint = dpoint
@@ -608,26 +568,26 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     return True
         return False
 
-    def mouse_button_pressed_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -&gt; bool:
+    def mouse_button_pressed_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -> bool:
         # NOTE: directly record drag selection origin, because some drag events could be skipped!
         self.drag_selection_from_dpoint = dpoint
         return False
 
-    def mouse_button_released_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -&gt; bool:
-        if DEBUG:
+    def mouse_button_released_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -> bool:
+        if Debugging.DEBUG:
             debug(f"mouse button released event, p={dpoint}, buttons={buttons}, prio={prio}")
         
         if self.is_dragging:
             self.is_dragging = False
-            self.drag_from_dpoint = None
-            self.drag_to_dpoint = None
+            self.drag_selection_from_dpoint = None
+            self.drag_selection_to_dpoint = None
             return True
 
         match self.state:
             case MoveQuicklyToolState.INACTIVE:
                 pass
             case MoveQuicklyToolState.SELECTING:
-                if self.selection is not None and not buttons &amp; pya.ButtonState.ShiftKey:
+                if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
                     self.state = MoveQuicklyToolState.MOVING
                     self.move_from_dpoint = dpoint
                     return True                        
@@ -643,25 +603,25 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 
         return False
 
-    def mouse_click_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -&gt; bool:
+    def mouse_click_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -> bool:
         if prio:
-            if buttons &amp; pya.ButtonState.LeftButton:
+            if buttons & pya.ButtonState.LeftButton:
                 match self.state:
                     case MoveQuicklyToolState.INACTIVE:
                         pass
                     case MoveQuicklyToolState.SELECTING:
-                        if self.selection is None or buttons &amp; pya.ButtonState.ShiftKey:
+                        if self.selection is None or buttons & pya.ButtonState.ShiftKey:
                             self._clear_all_markers()
                             self.select_object_at(dpoint, buttons)
                             
-                        if self.selection is not None and not buttons &amp; pya.ButtonState.ShiftKey:
+                        if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
                             self.state = MoveQuicklyToolState.MOVING
                             self.move_from_dpoint = dpoint
                         return True                        
                     case MoveQuicklyToolState.DRAG_SELECTING:
                         pass
                     case MoveQuicklyToolState.MOVING:
-                        if buttons &amp; pya.ButtonState.ShiftKey:
+                        if buttons & pya.ButtonState.ShiftKey:
                             self.select_object_at(dpoint, buttons)
                             self._clear_all_markers()
                             self.state = MoveQuicklyToolState.SELECTING
@@ -680,12 +640,12 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         return False
         
     def key_event(self, key: int, buttons: int):
-        if DEBUG:
+        if Debugging.DEBUG:
             debug(f"key_event: key={key}, buttons={buttons}")
         
-        if buttons &amp; pya.ButtonState.ShiftKey and \
+        if buttons & pya.ButtonState.ShiftKey and \
            self.state == MoveQuicklyToolState.MOVING:
-            if DEBUG:
+            if Debugging.DEBUG:
                 debug("key_event: shift cancels moving!")
             self.state = MoveQuicklyToolState.SELECTING
             self._clear_move_preview_markers()
@@ -693,7 +653,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 
         match key:
             case pya.KeyCode.Tab:
-                if DEBUG:
+                if Debugging.DEBUG:
                     debug("key_event: tab!")
                 if self.selection is not None:
                     orig_pos = self.selection.position.to_dtype(self.dbu)
@@ -705,7 +665,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     return True
                 
             case pya.KeyCode.Enter | pya.KeyCode.Return:
-                if DEBUG:
+                if Debugging.DEBUG:
                     debug("key_event: enter!")
                 if self.selection is not None:
                     self.commit_move()
@@ -724,7 +684,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         dx = operation.position.x + operation.delta.x - origin_pos.x
         dy = operation.position.y + operation.delta.y - origin_pos.y
 
-        if DEBUG:
+        if Debugging.DEBUG:
             debug(f"commit_move: origin_pos={origin_pos}, self.selection.position={self.selection.position}, "
                   f"operation.position={operation.position}, operation.delta={operation.delta}")
             
@@ -749,6 +709,3 @@ class MoveQuicklyToolPluginFactory(pya.PluginFactory):
     def create_plugin(self, manager, root, view):
         return MoveQuicklyToolPlugin(view)
 
-MoveQuicklyToolPluginFactory.instance = MoveQuicklyToolPluginFactory()
-</text>
-</klayout-macro>
