@@ -719,7 +719,6 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         
     def commit_move(self, operation: MoveOperation):
         self._clear_all_markers()
-        self.view.clear_selection()
         if self.selection is None:
             self.state = MoveQuicklyToolState.SELECTING
             return
@@ -736,8 +735,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 t.transform(trans)
         finally:
             self.view.commit()
-            self.view.clear_selection()
             self.selection = None
+            # reset move tool selection, but keep selection of the LayoutView
             # NOTE: do not deactivate, stay in M-mode!
             self.state = MoveQuicklyToolState.SELECTING
 
