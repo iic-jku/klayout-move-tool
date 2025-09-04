@@ -16,11 +16,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #--------------------------------------------------------------------------------
 
+import math
+from typing import *
+
 import pya
+
 from utils.debugging import debug, Debugging
 from utils.str_enum_compat import StrEnum
-
-import math
 
 
 class AngleMode(StrEnum):
@@ -72,6 +74,13 @@ class AngleMode(StrEnum):
             
         return result
 
+
+class EditGridKind(StrEnum):
+    NONE = 'none'      
+    GLOBAL = 'global'
+    OTHER = 'other'
+
+
 class EditorOptions:
     def __init__(self, view: pya.LayoutView):
         self.view = view
@@ -86,7 +95,20 @@ class EditorOptions:
 
     def plugin_configure(self, name: str, value: str):
         if name == 'edit-grid':
-            self._edit_grid = float(value)
+            match value:
+                case 'none':
+                    self._edit_grid_kind = EditGridKind.NONE
+                    self._edit_grid_value = None
+                case 'global':
+                    self._edit_grid_kind = EditGridKind.GLOBAL
+                    self._edit_grid_value = None  # we'll fetch it on demand in effective_edit_grid()
+                case _:
+                    try:
+                        self._edit_grid_value = float(value)
+                        self._edit_grid_kind = EditGridKind.OTHER
+                    except ValueError:
+                        self._edit_grid_kind = EditGridKind.NONE
+                        raise NotImplementedError(f"unknown value '{value}' for configuration key 'edit-grid'")
         elif name == 'edit-snap-objects-to-grid':
             self._edit_snap_objects_to_grid = value == 'true'
         elif name == 'edit-connect-angle-mode':
@@ -104,6 +126,16 @@ class EditorOptions:
     def edit_connect_angle_mode(self) -> AngleMode:
         return self._edit_connect_angle_mode
 
+    def effective_edit_grid(self) -> Optional[float]:
+        match self._edit_grid_kind:
+            case EditGridKind.NONE:
+                return None
+            case EditGridKind.GLOBAL:
+                um = float(self.view.get_config('grid-micron'))
+                return um
+            case EditGridKind.OTHER:
+                return self._edit_grid_value
+    
     @classmethod
     def show_editor_options(cls):
         # NOTE: if we directly call the Editor Options menu action
@@ -127,8 +159,12 @@ class EditorOptions:
         cls._defer_timer.start(0)
                 
     def snap_to_grid(self, point: pya.DPoint) -> pya.DPoint:
-        return pya.DPoint(round(point.x / self._edit_grid) * self._edit_grid,
-                          round(point.y / self._edit_grid) * self._edit_grid)
+        grid_um = self.effective_edit_grid()
+        if grid_um is None:
+            return point
+        else:
+            return pya.DPoint(round(point.x / grid_um) * grid_um,
+                              round(point.y / grid_um) * grid_um)
     
     def snap_to_grid_if_necessary(self, point: pya.DPoint) -> pya.DPoint:
         if self._edit_snap_objects_to_grid:
