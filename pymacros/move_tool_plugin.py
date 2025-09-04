@@ -117,10 +117,16 @@ class MouseMoveOperation(MoveOperation):
 
 @dataclass
 class TextMoveOperation(MoveOperation):
+    original_position: pya.DPoint
+
     x: float
     y: float
     dx: float
     dy: float
+    
+    def effective_delta(self) -> pya.DVector:
+        delta = pya.DPoint(self.x, self.y) - self.original_position + pya.DVector(self.dx, self.dy)
+        return delta
 
 
 class MoveQuicklyToolSetupDock(pya.QDockWidget):
@@ -302,7 +308,9 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
                 if Debugging.DEBUG:
                     debug("keyPressEvent: enter!")
                     
-                op = TextMoveOperation(self.x_value.value, self.y_value.value,
+                orig_pos = self.host.selection.position.to_dtype(self.host.dbu)
+                op = TextMoveOperation(orig_pos,
+                                       self.x_value.value, self.y_value.value,
                                        self.dx_value.value, self.dy_value.value)
                 self.host.commit_move(op)
                 event.accept()
