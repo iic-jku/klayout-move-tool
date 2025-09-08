@@ -99,7 +99,7 @@ class EditorOptions:
                 case 'none':
                     self._edit_grid_kind = EditGridKind.NONE
                     self._edit_grid_value = None
-                case 'global':
+                case 'global' | '':  # NOTE: empty string if grid was never changed yet
                     self._edit_grid_kind = EditGridKind.GLOBAL
                     self._edit_grid_value = None  # we'll fetch it on demand in effective_edit_grid()
                 case _:
