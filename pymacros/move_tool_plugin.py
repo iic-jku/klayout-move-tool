@@ -324,8 +324,6 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.setupDock      = None
         self.view            = view
 
-        self._defer_timer = None
-
         self._state = MoveQuicklyToolState.INACTIVE
 
         self._selection: Optional[MoveQuicklyToolSelection] = None
@@ -396,7 +394,38 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         if len(so) == 0:
             return None
         return MoveQuicklyToolSelection(objects=so)
+
+    def _visible_left_dock_widgets(self) -> List[pya.QDockWidget]:
+        widgets = []
+        mw = pya.MainWindow.instance()
+        for ch in mw.findChildren():
+            if 'QDockWidget' not in ch.__class__.__name__:
+                continue
+            if mw.dockWidgetArea(ch) == pya.Qt.LeftDockWidgetArea and ch.isVisible():
+                widgets.append(ch)
+        return widgets
         
+    @staticmethod
+    def is_left_dock_visible(visible_left_dock_widgets: List[pya.QDockWidget]) -> bool:
+        for w in visible_left_dock_widgets:
+            if Debugging.DEBUG:
+                debug(f"MoveQuicklyToolPlugin.is_left_dock_visible, "
+                      f"at least one dock is visible in the left sidebar.")
+            return True
+        if Debugging.DEBUG:
+            debug(f"MoveQuicklyToolPlugin.is_left_dock_visible, "
+                  f"no docks are visible in the left sidebar.")
+        return False
+    
+    def hide_left_dock_widgets(self):
+        visible_left_dock_widgets = self._visible_left_dock_widgets()
+        for w in visible_left_dock_widgets:
+            if w.isVisible():
+                w.setVisible(False)
+                if Debugging.DEBUG:
+                    debug(f"MoveQuicklyToolPlugin.hide_dock_widgets, "
+                          f"hiding visible dock widget {w}")
+    
     def activated(self):
         view_is_visible = self.view.widget().isVisible()
         if Debugging.DEBUG:
@@ -414,8 +443,20 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.setupDock.show()
 
         self.editor_options = EditorOptions(view=self.view)
-        EditorOptions.show_editor_options()
-
+        
+        # NOTE: only show the editor options if anything is shown in the left sidebar, but
+        #       not if the user has deliberatly hidden it and it would "waste" horizontal screen space
+        visible_left_dock_widgets = self._visible_left_dock_widgets()
+        if self.is_left_dock_visible(visible_left_dock_widgets):
+            debug(f"MoveQuicklyToolPlugin.activated: show editor options dock widget")
+            EditorOptions.show_editor_options()
+        else:
+            # FIXME: KLayout (at least >=0.30.4) seems to automatically show the editor options
+            #        which some users deliberatly have hidden
+            
+            # FIXME: workaround is to re-hide it!
+            EventLoop.defer(self.hide_left_dock_widgets)
+        
         self._state = MoveQuicklyToolState.SELECTING
         self.selection = self.selected_objects()
             
