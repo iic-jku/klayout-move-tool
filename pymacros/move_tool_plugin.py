@@ -417,6 +417,15 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                   f"no docks are visible in the left sidebar.")
         return False
     
+    def hide_left_dock_widgets(self):
+        visible_left_dock_widgets = self._visible_left_dock_widgets()
+        for w in visible_left_dock_widgets:
+            if w.isVisible():
+                w.setVisible(False)
+                if Debugging.DEBUG:
+                    debug(f"MoveQuicklyToolPlugin.hide_dock_widgets, "
+                          f"hiding visible dock widget {w}")
+    
     def activated(self):
         view_is_visible = self.view.widget().isVisible()
         if Debugging.DEBUG:
@@ -441,6 +450,13 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         if self.is_left_dock_visible(visible_left_dock_widgets):
             debug(f"MoveQuicklyToolPlugin.activated: show editor options dock widget")
             EditorOptions.show_editor_options()
+        else:
+            # FIXME: KLayout (at least >=0.30.4) seems to automatically show the editor options
+            #        which some users deliberatly have hidden
+            
+            # FIXME: workaround is to re-hide it!
+            EventLoop.defer(self.hide_left_dock_widgets)
+        
         self._state = MoveQuicklyToolState.SELECTING
         self.selection = self.selected_objects()
             
