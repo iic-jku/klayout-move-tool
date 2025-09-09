@@ -324,8 +324,6 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.setupDock      = None
         self.view            = view
 
-        self._defer_timer = None
-
         self._state = MoveQuicklyToolState.INACTIVE
 
         self._selection: Optional[MoveQuicklyToolSelection] = None
