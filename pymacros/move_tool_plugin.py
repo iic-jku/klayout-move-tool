@@ -28,6 +28,7 @@ import pya
 
 from utils.debugging import debug, Debugging
 from utils.editor_options import EditorOptions
+from utils.event_loop import EventLoop
 from utils.str_enum_compat import StrEnum
 
 
@@ -38,15 +39,29 @@ class MoveQuicklyToolState(StrEnum):
     MOVING = "moving"
 
 
+class ContainmentConstraint(StrEnum):
+    SEARCH_BOX_ENCLOSES_OBJECT = "search_box_encloses_object"
+    SEARCH_BOX_OVERLAPS_OBJECT = "search_box_overlaps_object"
+
+    def matches(self, search_box: pya.Box, candidate_box: pya.Box) -> bool:
+        match self:
+            case ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT:
+                return candidate_box.inside(search_box)
+            case ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT:
+                return candidate_box.overlaps(search_box)
+            case _:
+                raise NotImplementedError(f"ContainmentConstraint.matches: unknown type {self}")
+
 @dataclass
 class SelectableObject:
-    path: List[pya.InstElement]
+    path: pya.ObjectInstPath
     bbox: pya.Box
 
 
 @dataclass
 class ShapeOfInstance(SelectableObject):
     shape: pya.Shape
+    layer: int
  
     
 @dataclass
@@ -87,7 +102,7 @@ class MoveQuicklyToolSelection:
         for o in self.objects:
             if not isinstance(o, ShapeOfInstance):
                 continue
-            if len(o.path) == 0:
+            if len(o.path.path) == 0:
                 tl += [o.shape]  # directly move this shape
             else:  # the shape belongs to a subcell, never move the shape alone, always the whole cell
                 tl += [o.path[0].inst()]
@@ -373,7 +388,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
     def selection(self, selection: Optional[MoveQuicklyToolSelection]):
         # # Hotspot, don't log this
         # if Debugging.DEBUG:
-        #     debug(f"setting selection to {selection}")
+        #    debug(f"setting selection to {selection}")
         self._selection = selection
         if not(self.setupDock):
             pass
@@ -386,13 +401,16 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             if len(o.path) == 0:  # a shape within the same cell has to be aligned
                 if o.shape is not None:
                     bbox = o.shape.bbox().transformed(o.source_trans())
-                    so += [ShapeOfInstance(shape=o.shape, path=o.path, bbox=bbox)]
+                    so += [ShapeOfInstance(shape=o.shape, layer=o.layer, path=o, bbox=bbox)]
             else:  # the instance/shape is within subcells, we want to move only the top-most instance!
                 inst = o.path[0].inst()
                 bbox = inst.bbox()
-                so += [Instance(instance=inst, path=o.path[0:1], bbox=bbox)]
+                so += [Instance(instance=inst, path=o, bbox=bbox)]
         if len(so) == 0:
             return None
+        # # Hotspot, don't log this
+        # if Debugging.DEBUG:
+        #    debug(f"MoveQuicklyToolPlugin: {len(so)} objects selected")
         return MoveQuicklyToolSelection(objects=so)
 
     def _visible_left_dock_widgets(self) -> List[pya.QDockWidget]:
@@ -547,14 +565,6 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 marker.set(selection_box)
                 self.drag_selection_markers += [marker]
         
-    def select_object_at(self, dpoint: pya.DPoint, buttons: int):
-        if buttons & pya.ButtonState.ShiftKey:
-            selection_mode = pya.LayoutView.SelectionMode.Add
-        else:
-            selection_mode = pya.LayoutView.SelectionMode.Replace
-        self.view.select_from(dpoint, selection_mode)
-        self.selection = self.selected_objects()
-       
     def visible_layer_indexes(self) -> List[int]:
         idxs = []
         for lref in self.view.each_layer():
@@ -569,31 +579,82 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 idxs.append(lref.layer_index())
         return idxs
     
-    def select_objects(self, search_box: pya.DBox, selection_mode: pya.LayoutView.SelectionMode):
+    def _select_objects(self, 
+                        search_box: pya.DBox, 
+                        selection_mode: pya.LayoutView.SelectionMode,
+                        containment_constraint: ContainmentConstraint):
         search_box = search_box.to_itype(self.dbu)
         visible_layer_indexes = self.visible_layer_indexes()
+
+        already_added_objects: Set[pya.Instance | pya.Shape]
+        selected_objects: List[pya.ObjectInstPath]
+
+        match selection_mode:
+            case pya.LayoutView.SelectionMode.Add:
+                selected_objects = self.view.object_selection
+                already_added_objects += [self.selection.as_transformees()]
+            case pya.LayoutView.SelectionMode.Replace | pya.LayoutView.SelectionMode.Invert | _:  # TODO: treat invert properly
+                selected_objects = []
+                already_added_objects = set()
+        
         for top_cell in self.layout.top_cells():
             if self.cell_view.is_cell_hidden(top_cell):
                 continue
             if self.view.max_hier_levels >= 1:
                 iter = top_cell.begin_instances_rec_overlapping(search_box)
-                iter.min_depth = max(self.view.min_hier_levels-1, 0)
-                iter.max_depth = max(self.view.max_hier_levels-1, 0)
+                iter.min_depth = 0
+                iter.max_depth = 1    
                 while not iter.at_end():
-                    inst = iter.current_inst_element().inst()
-                    hidden = self.view.is_cell_hidden(inst.cell.cell_index(), self.view.active_cellview_index)
-                    if not hidden:
-                        self.view.select_from(inst.bbox().to_dtype(self.dbu), selection_mode)
+                    if len(iter.path()) == 0:
+                        inst = iter.current_inst_element().inst()
+                        if inst not in already_added_objects:
+                            inst_bbox_from_top = inst.bbox().transformed(iter.trans())
+                            if containment_constraint.matches(search_box, inst_bbox_from_top):
+                                hidden = self.view.is_cell_hidden(inst.cell.cell_index(), self.view.active_cellview_index)
+                                if not hidden:
+                                    p = pya.ObjectInstPath()
+                                    p.cv_index = self.view.active_cellview_index
+                                    p.append_path(iter.current_inst_element())
+                                    selected_objects.append(p)
+                                    already_added_objects.add(inst)
                     iter.next()
-            if self.view.max_hier_levels >= 1:
+
                 for lyr in visible_layer_indexes:
                     iter = top_cell.begin_shapes_rec_overlapping(lyr, search_box)
-                    iter.min_depth = max(self.view.min_hier_levels-1, 0)
-                    iter.max_depth = max(self.view.max_hier_levels-1, 0)
+                    iter.min_depth = 0
+                    iter.max_depth = 1
                     while not iter.at_end():
-                        sh = iter.shape()
-                        self.view.select_from(sh.bbox().to_dtype(self.dbu), selection_mode)
+                        if len(iter.path()) == 0:
+                            sh = iter.shape()
+                            if sh not in already_added_objects:
+                                if containment_constraint.matches(search_box, sh.bbox()):
+                                    p = pya.ObjectInstPath(iter, self.cell_view.index())
+                                    selected_objects.append(p)
+                                    already_added_objects.add(sh)
                         iter.next()
+                        
+        # # Hotspot, don't log this
+        # if Debugging.DEBUG:
+        #    msg = f"MoveQuicklyToolPlugin.select_objects: selecting {len(selected_objects)} objects\n"
+        #    for o in already_added_objects:
+        #        msg += f"\tobject {o}"
+        #    debug(msg)
+        self.view.object_selection = selected_objects
+        self.selection = self.selected_objects()
+    
+    def select_object_at(self, dpoint: pya.DPoint, buttons: int):
+        if buttons & pya.ButtonState.ShiftKey:
+            selection_mode = pya.LayoutView.SelectionMode.Add
+        else:
+            selection_mode = pya.LayoutView.SelectionMode.Replace
+        self._select_objects(search_box=pya.DBox(dpoint, dpoint),
+                             selection_mode=selection_mode,
+                             containment_constraint=ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT)
+    
+    def select_objects_enclosed_by(self, search_box: pya.DBox, selection_mode: pya.LayoutView.SelectionMode):
+        self._select_objects(search_box=search_box,
+                             selection_mode=selection_mode,
+                             containment_constraint=ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT)
         
     def mouse_moved_event(self, dpoint: pya.DPoint, buttons: int, prio: bool):
         if prio:
@@ -616,8 +677,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 if self.drag_selection_from_dpoint is None:
                     return False
                 
-                self.select_objects(pya.DBox(self.drag_selection_from_dpoint, self.drag_selection_to_dpoint), pya.LayoutView.SelectionMode.Add)
-                self.selection = self.selected_objects()
+                selection_mode: pya.LayoutView.SelectionMode
+                if buttons & pya.ButtonState.ShiftKey:
+                    selection_mode = pya.LayoutView.SelectionMode.Add
+                else:
+                    selection_mode = pya.LayoutView.SelectionMode.Replace
+                
+                self._clear_move_preview_markers()
+                self.select_objects_enclosed_by(pya.DBox(self.drag_selection_from_dpoint, self.drag_selection_to_dpoint), selection_mode)
                 
                 self.update_drag_selection_markers()
                 return True
@@ -715,7 +782,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                         elif self.selection is not None:
                             self.commit_move(self.move_operation)
                         return True                        
-            elif buttons in [pya.ButtonState.RightButton, pya.ButtonState.RightButton]:
+            elif buttons in [pya.ButtonState.RightButton]:
                 self._clear_all_markers()
                 self.view.clear_selection()
                 self.selection = None
@@ -760,15 +827,16 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         
     def commit_move(self, operation: MoveOperation):
         self._clear_all_markers()
+        
         if self.selection is None:
             self.state = MoveQuicklyToolState.SELECTING
             return
             
-        delta = operation.effective_delta()
-
         if Debugging.DEBUG:
             debug(f"commit_move: operation={operation}")
-            
+
+        delta = operation.effective_delta()
+        
         self.view.transaction("move quickly")
         try:
             trans = pya.DTrans(delta.x, delta.y)
@@ -776,10 +844,20 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 t.transform(trans)
         finally:
             self.view.commit()
-            self.selection = None
-            # reset move tool selection, but keep selection of the LayoutView
-            # NOTE: do not deactivate, stay in M-mode!
+
             self.state = MoveQuicklyToolState.SELECTING
+            
+            # NOTE: one problem in KLayout 0.30.3 is that transforming instances
+            #       will deselect them, so we need to re-select them
+            def reselect_selection():
+                selection_paths: List[pya.ObjectInstPath] = [o.path for o in self.selection.objects]
+                self.view.object_selection = selection_paths
+            
+            # keep selection of the LayoutView
+            # NOTE: do not deactivate, stay in M-mode!
+              
+            reselect_selection()
+            self.selection = self.selected_objects()  # re-new position after move
 
 
 class MoveQuicklyToolPluginFactory(pya.PluginFactory):
