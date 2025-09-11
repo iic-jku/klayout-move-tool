@@ -29,6 +29,7 @@ import pya
 from utils.debugging import debug, Debugging
 from utils.editor_options import EditorOptions
 from utils.event_loop import EventLoop
+from utils.object_description import describe_object
 from utils.str_enum_compat import StrEnum
 
 
@@ -582,7 +583,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
     def _select_objects(self, 
                         search_box: pya.DBox, 
                         selection_mode: pya.LayoutView.SelectionMode,
-                        containment_constraint: ContainmentConstraint):
+                        containment_constraint: ContainmentConstraint,
+                        allow_multiple: bool):
+        dpoint = search_box.p1   # for single click mode allow_multiple=False
         search_box = search_box.to_itype(self.dbu)
         visible_layer_indexes = self.visible_layer_indexes()
 
@@ -639,6 +642,41 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         #    for o in already_added_objects:
         #        msg += f"\tobject {o}"
         #    debug(msg)
+
+        def on_selected_object_chosen(action: pya.Action, obj: pya.ObjectInstPath):
+            if Debugging.DEBUG:
+                debug(f"action {action} / obj {obj} was chosen")
+        
+        if len(selected_objects) >= 2 and not allow_multiple:
+            # single object selection mode, we show the user a popupmenu with the available options
+            menu = pya.QMenu()
+            
+            title_action = pya.QAction("Multiple shapes under cursor:", menu)
+            title_action.setEnabled(False)
+            font = title_action.font
+            font.setBold(True)
+            title_action.setFont(font)
+            menu.addAction(title_action)
+            
+            # NOTE: pya.QAction.setData() does not seem to work, 
+            #       the returned choice is valid (text), but it's data is None
+            #       so we go with the action
+            action2idx: Dict[pya.Action, int] = {}
+            
+            for i, o in enumerate(selected_objects):
+                text = f"#{i}: {describe_object(o)}"
+                action = pya.QAction(text, menu)
+                menu.addAction(action)
+                action2idx[action] = i
+            choice = menu.exec_(pya.QCursor.pos)
+            if choice:
+                idx = action2idx[choice]
+                selected_objects = [selected_objects[idx]]
+                if Debugging.DEBUG:
+                    debug(f"action {choice.text} / obj {selected_objects[0]} was chosen")
+            else:
+                selected_objects = []
+                
         self.view.object_selection = selected_objects
         self.selection = self.selected_objects()
     
@@ -649,12 +687,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             selection_mode = pya.LayoutView.SelectionMode.Replace
         self._select_objects(search_box=pya.DBox(dpoint, dpoint),
                              selection_mode=selection_mode,
-                             containment_constraint=ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT)
+                             containment_constraint=ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT,
+                             allow_multiple=False)
     
     def select_objects_enclosed_by(self, search_box: pya.DBox, selection_mode: pya.LayoutView.SelectionMode):
         self._select_objects(search_box=search_box,
                              selection_mode=selection_mode,
-                             containment_constraint=ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT)
+                             containment_constraint=ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT,
+                             allow_multiple=True)
         
     def mouse_moved_event(self, dpoint: pya.DPoint, buttons: int, prio: bool):
         if prio:

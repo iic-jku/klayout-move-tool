@@ -43,11 +43,13 @@ from importlib import reload
 import utils.debugging
 import utils.editor_options
 import utils.event_loop
+import utils.object_description
 import utils.str_enum_compat
 import move_tool_plugin
 reload(utils.debugging)
 reload(utils.editor_options)
 reload(utils.event_loop)
+reload(utils.object_description)
 reload(utils.str_enum_compat)
 reload(move_tool_plugin)
 
