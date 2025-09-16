@@ -26,11 +26,11 @@ import sys
 
 import pya
 
-from utils.debugging import debug, Debugging
-from utils.editor_options import EditorOptions
-from utils.event_loop import EventLoop
-from utils.object_description import describe_object
-from utils.str_enum_compat import StrEnum
+from klayout_plugin_utils.debugging import debug, Debugging
+from klayout_plugin_utils.editor_options import EditorOptions
+from klayout_plugin_utils.event_loop import EventLoop
+from klayout_plugin_utils.object_description import describe_object
+from klayout_plugin_utils.str_enum_compat import StrEnum
 
 
 class MoveQuicklyToolState(StrEnum):
