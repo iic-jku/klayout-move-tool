@@ -49,7 +49,7 @@ class ContainmentConstraint(StrEnum):
             case ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT:
                 return candidate_box.inside(search_box)
             case ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT:
-                return candidate_box.overlaps(search_box)
+                return candidate_box.touches(search_box)
             case _:
                 raise NotImplementedError(f"ContainmentConstraint.matches: unknown type {self}")
 
