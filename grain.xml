@@ -3,7 +3,7 @@
  <name>MoveQuicklyToolPlugin</name>
  <token/>
  <hidden>false</hidden>
- <version>0.13</version>
+ <version>0.14</version>
  <api-version/>
  <title>Move Quickly Tool Plugin</title>
  <doc>Tool to quickly move layout objects</doc>
