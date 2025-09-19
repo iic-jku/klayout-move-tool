@@ -36,7 +36,7 @@
 import os 
 import sys
 
-directory_containing_this_script = os.path.realpath(os.path.join(os.path.dirname(__file__)))
+directory_containing_this_script = os.path.realpath(os.path.dirname(__file__))
 for name in (
     'KLayoutPluginUtils',   # deployed via Salt
     'klayout-plugin-utils'  # source code

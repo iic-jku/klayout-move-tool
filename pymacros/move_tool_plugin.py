@@ -106,9 +106,23 @@ class MoveQuicklyToolSelection:
             if len(o.path.path) == 0:
                 tl += [o.shape]  # directly move this shape
             else:  # the shape belongs to a subcell, never move the shape alone, always the whole cell
+                # TODO: this should be dead code?!?!!
                 tl += [o.path[0].inst()]
         return tl
 
+    def transform(self, trans: pya.DTrans):
+        # NOTE: see https://github.com/KLayout/klayout/issues/2150#issuecomment-3282412316
+        #       when manipulating Shapes/Instances, the Shape instances are potentially replaced by KLayout
+        #       so we have to update the ObjectInstPath fields
+        for o in self.objects:
+            if isinstance(o, Instance):
+                o.instance.transform(trans)
+                o.path.path = [pya.InstElement(o.instance)]
+            elif not isinstance(o, ShapeOfInstance):
+                continue
+            elif len(o.path.path) == 0:
+                o.shape.transform(trans)  # directly move this shape
+                o.path.shape = o.shape
 
 @dataclass
 class MoveOperation:
@@ -880,8 +894,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self.view.transaction("move quickly")
         try:
             trans = pya.DTrans(delta.x, delta.y)
-            for t in self.selection.as_transformees():
-                t.transform(trans)
+            self.selection.transform(trans)
         finally:
             self.view.commit()
 
