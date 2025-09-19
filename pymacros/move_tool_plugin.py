@@ -551,6 +551,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             case MoveQuicklyToolState.INACTIVE | MoveQuicklyToolState.SELECTING | MoveQuicklyToolState.DRAG_SELECTING:
                 return
             case MoveQuicklyToolState.MOVING:
+                if self.move_operation is None:
+                    return
+                
                 delta = self.move_operation.effective_delta()
                 preview_box = self.selection.bbox.to_dtype(self.dbu).moved(delta)
                 
@@ -880,14 +883,18 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         return False
         
     def commit_move(self, operation: MoveOperation):
+        if Debugging.DEBUG:
+            debug(f"commit_move: operation={operation}")
+            
         self._clear_all_markers()
         
         if self.selection is None:
             self.state = MoveQuicklyToolState.SELECTING
             return
-            
-        if Debugging.DEBUG:
-            debug(f"commit_move: operation={operation}")
+
+        if operation is None:
+            self.state = MoveQuicklyToolState.SELECTING
+            return
 
         delta = operation.effective_delta()
         
