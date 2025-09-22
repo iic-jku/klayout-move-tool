@@ -185,6 +185,9 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         self.host = host
         self.selection_label = pya.QLabel('<span style="text-decoration: underline;">Selection:</span>')
         self.selection_value = pya.QLabel('None')
+        self.selection_value.setTextFormat(pya.Qt.RichText)
+        self.selection_value.setTextInteractionFlags(pya.Qt.TextBrowserInteraction)
+        self.selection_value.linkActivated.connect(self.on_selected_objects_label_clicked)
         
         self.x_label = pya.QLabel('<span style="text-decoration: underline;">X:</span>')
         self.x_value = pya.QDoubleSpinBox()
@@ -265,7 +268,8 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
 
     def updateSelection(self, selection: Optional[MoveQuicklyToolSelection]):
         txt = self.format_selection(selection)
-        self.selection_value.setText(txt)
+        self.selection_value.setText(f"<a href=\"show-properties\">{txt}</a>")
+        
         
         enabled = selection is not None
         self.x_value.setEnabled(enabled)
@@ -291,6 +295,11 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
             self.y_value.setValue(0.0)
         self.dx_value.setValue(0.0)
         self.dy_value.setValue(0.0)
+
+    def on_selected_objects_label_clicked(self):
+        if Debugging.DEBUG:
+            debug(f"MoveQuicklyToolSetupWidget.on_selected_objects_label_clicked")
+        pya.MainWindow.instance().menu().action('edit_menu.show_properties').trigger()
 
     def updatePositionValues(self, x: float, y: float, dx: float, dy: float):
         self.x_value.setValue(x)
