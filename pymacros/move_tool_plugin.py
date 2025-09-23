@@ -30,6 +30,7 @@ from klayout_plugin_utils.debugging import debug, Debugging
 from klayout_plugin_utils.editor_options import EditorOptions
 from klayout_plugin_utils.event_loop import EventLoop
 from klayout_plugin_utils.object_description import describe_object
+from klayout_plugin_utils.selection_filter_options import SelectionFilterOptions
 from klayout_plugin_utils.str_enum_compat import StrEnum
 
 
@@ -615,6 +616,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         search_box = search_box.to_itype(self.dbu)
         visible_layer_indexes = self.visible_layer_indexes()
 
+        selection_filter_options = SelectionFilterOptions.from_ui()
+
         already_added_objects: Set[pya.Instance | pya.Shape]
         selected_objects: List[pya.ObjectInstPath]
 
@@ -630,37 +633,40 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             if self.cell_view.is_cell_hidden(top_cell):
                 continue
             if self.view.max_hier_levels >= 1:
-                iter = top_cell.begin_instances_rec_overlapping(search_box)
-                iter.min_depth = 0
-                iter.max_depth = 1    
-                while not iter.at_end():
-                    if len(iter.path()) == 0:
-                        inst = iter.current_inst_element().inst()
-                        if inst not in already_added_objects:
-                            inst_bbox_from_top = inst.bbox().transformed(iter.trans())
-                            if containment_constraint.matches(search_box, inst_bbox_from_top):
-                                hidden = self.view.is_cell_hidden(inst.cell.cell_index(), self.view.active_cellview_index)
-                                if not hidden:
-                                    p = pya.ObjectInstPath()
-                                    p.cv_index = self.view.active_cellview_index
-                                    p.append_path(iter.current_inst_element())
-                                    selected_objects.append(p)
-                                    already_added_objects.add(inst)
-                    iter.next()
-
-                for lyr in visible_layer_indexes:
-                    iter = top_cell.begin_shapes_rec_overlapping(lyr, search_box)
+                if selection_filter_options.include_instances():
+                    iter = top_cell.begin_instances_rec_overlapping(search_box)
                     iter.min_depth = 0
-                    iter.max_depth = 1
+                    iter.max_depth = 1    
                     while not iter.at_end():
                         if len(iter.path()) == 0:
-                            sh = iter.shape()
-                            if sh not in already_added_objects:
-                                if containment_constraint.matches(search_box, sh.bbox()):
-                                    p = pya.ObjectInstPath(iter, self.cell_view.index())
-                                    selected_objects.append(p)
-                                    already_added_objects.add(sh)
+                            inst = iter.current_inst_element().inst()
+                            if inst not in already_added_objects:
+                                inst_bbox_from_top = inst.bbox().transformed(iter.trans())
+                                if containment_constraint.matches(search_box, inst_bbox_from_top):
+                                    hidden = self.view.is_cell_hidden(inst.cell.cell_index(), self.view.active_cellview_index)
+                                    if not hidden:
+                                        p = pya.ObjectInstPath()
+                                        p.cv_index = self.view.active_cellview_index
+                                        p.append_path(iter.current_inst_element())
+                                        selected_objects.append(p)
+                                        already_added_objects.add(inst)
                         iter.next()
+                
+                if selection_filter_options.include_shapes():
+                    for lyr in visible_layer_indexes:
+                        iter = top_cell.begin_shapes_rec_overlapping(lyr, search_box)
+                        iter.min_depth = 0
+                        iter.max_depth = 1
+                        while not iter.at_end():
+                            if len(iter.path()) == 0:
+                                sh = iter.shape()
+                                if selection_filter_options.include_shape(sh):
+                                    if sh not in already_added_objects:
+                                        if containment_constraint.matches(search_box, sh.bbox()):
+                                            p = pya.ObjectInstPath(iter, self.cell_view.index())
+                                            selected_objects.append(p)
+                                            already_added_objects.add(sh)
+                            iter.next()
                         
         # # Hotspot, don't log this
         # if Debugging.DEBUG:
