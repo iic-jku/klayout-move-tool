@@ -618,16 +618,16 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 
         selection_filter_options = SelectionFilterOptions.from_ui()
 
-        already_added_objects: Set[pya.Instance | pya.Shape]
+        already_added_objects: Set[pya.Instance | pya.Shape] = set()
         selected_objects: List[pya.ObjectInstPath]
 
         match selection_mode:
             case pya.LayoutView.SelectionMode.Add:
                 selected_objects = self.view.object_selection
-                already_added_objects += [self.selection.as_transformees()]
+                if self.selection:
+                    already_added_objects |= set(self.selection.as_transformees())
             case pya.LayoutView.SelectionMode.Replace | pya.LayoutView.SelectionMode.Invert | _:  # TODO: treat invert properly
                 selected_objects = []
-                already_added_objects = set()
         
         for top_cell in self.layout.top_cells():
             if self.cell_view.is_cell_hidden(top_cell):
@@ -720,13 +720,13 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self._select_objects(search_box=pya.DBox(dpoint, dpoint),
                              selection_mode=selection_mode,
                              containment_constraint=ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT,
-                             allow_multiple=False)
+                             allow_multiple=selection_mode == pya.LayoutView.SelectionMode.Add)
     
     def select_objects_enclosed_by(self, search_box: pya.DBox, selection_mode: pya.LayoutView.SelectionMode):
         self._select_objects(search_box=search_box,
                              selection_mode=selection_mode,
                              containment_constraint=ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT,
-                             allow_multiple=True)
+                             allow_multiple=selection_mode == pya.LayoutView.SelectionMode.Add)
         
     def mouse_moved_event(self, dpoint: pya.DPoint, buttons: int, prio: bool):
         if prio:
