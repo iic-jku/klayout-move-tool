@@ -52,12 +52,14 @@ import klayout_plugin_utils.debugging
 import klayout_plugin_utils.editor_options
 import klayout_plugin_utils.event_loop
 import klayout_plugin_utils.object_description
+import klayout_plugin_utils.selection_filter_options
 import klayout_plugin_utils.str_enum_compat
 import move_tool_plugin
 reload(klayout_plugin_utils.debugging)
 reload(klayout_plugin_utils.editor_options)
 reload(klayout_plugin_utils.event_loop)
 reload(klayout_plugin_utils.object_description)
+reload(klayout_plugin_utils.selection_filter_options)
 reload(klayout_plugin_utils.str_enum_compat)
 reload(move_tool_plugin)
 
