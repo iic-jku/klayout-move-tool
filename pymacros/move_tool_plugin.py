@@ -726,7 +726,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         self._select_objects(search_box=search_box,
                              selection_mode=selection_mode,
                              containment_constraint=ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT,
-                             allow_multiple=selection_mode == pya.LayoutView.SelectionMode.Add)
+                             allow_multiple=True)
         
     def mouse_moved_event(self, dpoint: pya.DPoint, buttons: int, prio: bool):
         if prio:
