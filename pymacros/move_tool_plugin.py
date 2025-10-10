@@ -502,7 +502,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         
         self._state = MoveQuicklyToolState.SELECTING
         self.selection = self.selected_objects()
-            
+        
     def deactivated(self):
         if Debugging.DEBUG:
             debug("MoveQuicklyToolPlugin.deactivated")
@@ -531,6 +531,27 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             debug(f"MoveQuicklyToolPlugin.configure, name={name}, value={value}")
         if self.editor_options is not None:
             self.editor_options.plugin_configure(name, value)
+        return False
+        
+    def menu_activated(self, symbol: str) -> bool:
+        if self._state == MoveQuicklyToolState.INACTIVE:
+            return False
+    
+        if Debugging.DEBUG:
+            debug(f"MoveQuicklyToolPlugin.menu_activated: symbol={symbol}")
+
+        if symbol in ('cm_delete',):
+            # NOTE: this means the selection could have been invalidated!
+            def update_selection():
+                if Debugging.DEBUG:
+                    debug(f"MoveQuicklyToolPlugin.menu_activated: clearing selection after delete action …")
+                self._clear_all_markers()
+                self.view.clear_selection()
+                self.selection = None
+                self.state = MoveQuicklyToolState.SELECTING
+            
+            EventLoop.defer(update_selection)
+
         return False
 
     def _clear_move_preview_markers(self):
