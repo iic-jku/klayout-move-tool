@@ -398,7 +398,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
     @state.setter
     def state(self, state: MoveQuicklyToolState):
         if Debugging.DEBUG:
-            debug(f"Transitioning from {self._state.value} to {state.value}")
+            debug(f"MoveQuicklyToolPlugin.state=: Transitioning from {self._state.value} to {state.value}")
         self._state = state
         if not(self.setupDock):
             pass
