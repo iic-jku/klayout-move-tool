@@ -673,11 +673,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         if self.cell_view.is_cell_hidden(top_cell):
             return
         
+        iteration_limit = 1000
+        
         if self.view.max_hier_levels >= 1:
             if selection_filter_options.include_instances():
                 iter = top_cell.begin_instances_rec_overlapping(search_box)
                 iter.min_depth = 0
-                iter.max_depth = 1    
+                iter.max_depth = 1
+                i = 0
                 while not iter.at_end():
                     if len(iter.path()) == 0:
                         inst = iter.current_inst_element().inst()
@@ -692,6 +695,10 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                                     selected_objects.append(p)
                                     already_added_objects.add(inst)
                     iter.next()
+                    i += 1
+                    if i >= iteration_limit:
+                        break
+                    
             
             if selection_filter_options.include_shapes():
                 for lyr in visible_layer_indexes:
@@ -719,6 +726,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                         iter.min_depth = 0
                         iter.max_depth = 1
                         iter.shape_flags = pya.Shapes.STexts
+                        i = 0
                         while not iter.at_end():
                             if len(iter.path()) == 0:
                                 sh = iter.shape()
@@ -734,10 +742,15 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                                             selected_objects.append(p)
                                             already_added_objects.add(sh)
                             iter.next()
+                            i += 1
+                            if i >= iteration_limit:
+                                break
+
                     iter = top_cell.begin_shapes_rec_overlapping(lyr, search_box)
                     iter.min_depth = 0
                     iter.max_depth = 1
                     iter.shape_flags = pya.Shapes.SAll & ~pya.Shapes.STexts
+                    i = 0
                     while not iter.at_end():
                         if len(iter.path()) == 0:
                             sh = iter.shape()
@@ -748,6 +761,9 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                                         selected_objects.append(p)
                                         already_added_objects.add(sh)
                         iter.next()
+                        i += 1
+                        if i >= iteration_limit:
+                            break
                         
         # # Hotspot, don't log this
         # if Debugging.DEBUG:
