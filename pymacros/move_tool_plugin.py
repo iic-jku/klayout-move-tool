@@ -81,16 +81,19 @@ class MoveQuicklyToolSelection:
     def is_multi_selection(self) -> bool:
         return len(self.objects) >= 2
         
-    @cached_property
-    def bbox(self) -> pya.Box:
+    def bbox(self, view: pya.LayoutView) -> pya.Box:
         r = pya.Region()
         for o in self.objects:
-            r.insert(o.bbox)
+            bbox = o.bbox
+            if isinstance(o, ShapeOfInstance) and o.shape.is_text() and 'TextInfo' in dir(pya):
+                ti = pya.TextInfo(view)
+                bbox = ti.bbox(o.shape)
+            r.insert(bbox)
         return r.bbox()
     
-    @cached_property
-    def position(self) -> pya.Point:
-        return pya.Point(self.bbox.left, self.bbox.bottom)
+    def position(self, view: pya.LayoutView) -> pya.Point:
+        bbox = self.bbox(view)
+        return pya.Point(bbox.left, bbox.bottom)
 
     def all_instances(self) -> List[Instance]:
         return [o for o in self.objects if isinstance(o, Instance)]
@@ -279,7 +282,7 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         self.dy_value.setEnabled(enabled)
         
         if enabled:
-            dpos: pya.DPoint = selection.position.to_dtype(self.host.dbu)
+            dpos: pya.DPoint = selection.position(self.host.view).to_dtype(self.host.dbu)
             if dpos is None:
                 self.x_value.setValue(0.0)
                 self.y_value.setValue(0.0)
@@ -348,7 +351,7 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
                 if Debugging.DEBUG:
                     debug("keyPressEvent: enter!")
                     
-                orig_pos = self.host.selection.position.to_dtype(self.host.dbu)
+                orig_pos = self.host.selection.position(self.host.view).to_dtype(self.host.dbu)
                 op = TextMoveOperation(orig_pos,
                                        self.x_value.value, self.y_value.value,
                                        self.dx_value.value, self.dy_value.value)
@@ -586,7 +589,8 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     return
                 
                 delta = self.move_operation.effective_delta()
-                preview_box = self.selection.bbox.to_dtype(self.dbu).moved(delta)
+                
+                preview_box = self.selection.bbox(self.view).to_dtype(self.dbu).moved(delta)
                 
                 marker = pya.Marker(self.view)
                 marker.line_style     = 0
@@ -594,8 +598,15 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 marker.vertex_size    = 0 
                 marker.dither_pattern = 1
                 marker.set(preview_box)
-                
                 self.move_preview_markers += [marker]
+                
+                # add texts
+                for o in self.selection.objects:
+                    if isinstance(o, ShapeOfInstance) and o.shape.is_text():
+                        text_marker = pya.Marker(self.view)
+                        dtext = o.shape.text.to_dtype(self.dbu).moved(delta)
+                        text_marker.set(dtext)
+                        self.move_preview_markers += [text_marker]
         
     def update_drag_selection_markers(self):
         self._clear_drag_selection_markers()
@@ -650,6 +661,14 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             case pya.LayoutView.SelectionMode.Replace | pya.LayoutView.SelectionMode.Invert | _:  # TODO: treat invert properly
                 selected_objects = []
         
+        text_info = None
+        if 'TextInfo' in dir(pya):  # KLayout >= 0.30.5
+            text_info = pya.TextInfo(self.view)
+        
+        # NOTE: self.layout.top_cells() are the top cells from the layout perspective,
+        #       but self.cell_view.cell is the current top cell,  
+        #       which is user-configurable via 'Show As New Top'
+        
         top_cell = self.cell_view.cell
         if self.cell_view.is_cell_hidden(top_cell):
             return
@@ -676,9 +695,49 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             
             if selection_filter_options.include_shapes():
                 for lyr in visible_layer_indexes:
+                    # NOTE: A text is only a point, so there's a mismatch between the effectively rendered BBox.
+                    #       So drag-selection would work (as the search_box encloses the point,
+                    #       but if single-click mode selection is used, the search_box is only a point,
+                    #       and selection does not work, as the two points virtually never touch.
+                    #       Therefore we need a larger search box (e.g. screen window size) 
+                    #       and we use TextInfo(LayoutView).bbox() to get the effective rendered BBox.
+                    if SelectionFilterOptions.TEXTS in selection_filter_options:
+                        vp_trans = self.view.viewport_trans()
+                        disp = vp_trans.disp / vp_trans.mag
+                        disp = disp.to_itype(self.dbu)
+                        dsize = pya.DVector(self.view.viewport_width(), self.view.viewport_height())
+                        dsize = dsize / vp_trans.mag
+                        
+                        x = -disp.x
+                        y = -disp.y
+                        size = dsize.to_itype(self.dbu)
+                        
+                        text_search_box = pya.Box(x, y, x + size.x, y + size.y)
+                        text_search_box = text_search_box.enlarged(10)  # extra oversize
+                        
+                        iter = top_cell.begin_shapes_rec_touching(lyr, text_search_box)
+                        iter.min_depth = 0
+                        iter.max_depth = 1
+                        iter.shape_flags = pya.Shapes.STexts
+                        while not iter.at_end():
+                            if len(iter.path()) == 0:
+                                sh = iter.shape()
+                                if selection_filter_options.include_shape(sh):
+                                    shape_box: BBox
+                                    if sh.is_text() and text_info is not None:
+                                        shape_box = text_info.bbox(sh)
+                                    else:
+                                        shape_box = sh.bbox()
+                                    if sh not in already_added_objects:
+                                        if containment_constraint.matches(search_box, shape_box):
+                                            p = pya.ObjectInstPath(iter, self.cell_view.index())
+                                            selected_objects.append(p)
+                                            already_added_objects.add(sh)
+                            iter.next()
                     iter = top_cell.begin_shapes_rec_overlapping(lyr, search_box)
                     iter.min_depth = 0
                     iter.max_depth = 1
+                    iter.shape_flags = pya.Shapes.SAll & ~pya.Shapes.STexts
                     while not iter.at_end():
                         if len(iter.path()) == 0:
                             sh = iter.shape()
@@ -797,7 +856,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     
                     delta = constrained_to_cursor - snapped_from_cursor
                     
-                    orig_pos = self.selection.position.to_dtype(self.dbu)
+                    orig_pos = self.selection.position(self.view).to_dtype(self.dbu)
                     pos = self.editor_options.snap_to_grid_if_necessary(orig_pos)
                     
                     self.move_operation = MouseMoveOperation(original_position=orig_pos, 
@@ -902,7 +961,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                 if Debugging.DEBUG:
                     debug("key_event: tab!")
                 if self.selection is not None:
-                    orig_pos = self.selection.position.to_dtype(self.dbu)
+                    orig_pos = self.selection.position(self.view).to_dtype(self.dbu)
                     self.setupDock.updatePositionValues(orig_pos.x,
                                                         orig_pos.y,
                                                         0.0, 0.0)
