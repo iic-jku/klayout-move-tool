@@ -698,7 +698,6 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     i += 1
                     if i >= iteration_limit:
                         break
-                    
             
             if selection_filter_options.include_shapes():
                 for lyr in visible_layer_indexes:
@@ -708,7 +707,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                     #       and selection does not work, as the two points virtually never touch.
                     #       Therefore we need a larger search box (e.g. screen window size) 
                     #       and we use TextInfo(LayoutView).bbox() to get the effective rendered BBox.
-                    if SelectionFilterOptions.TEXTS in selection_filter_options:
+                    if selection_filter_options.include_texts():
                         vp_trans = self.view.viewport_trans()
                         disp = vp_trans.disp / vp_trans.mag
                         disp = disp.to_itype(self.dbu)
