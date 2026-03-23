@@ -740,7 +740,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                             if len(iter.path()) == 0:
                                 sh = iter.shape()
                                 if selection_filter_options.include_shape(sh):
-                                    shape_box: BBox
+                                    shape_box: pya.Box
                                     if sh.is_text() and text_info is not None:
                                         shape_box = text_info.bbox(sh)
                                     else:
