@@ -46,13 +46,13 @@ class ContainmentConstraint(StrEnum):
     SEARCH_BOX_OVERLAPS_OBJECT = "search_box_overlaps_object"
 
     def matches(self, search_box: pya.Box, candidate_box: pya.Box) -> bool:
-        match self:
-            case ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT:
-                return candidate_box.inside(search_box)
-            case ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT:
-                return candidate_box.touches(search_box)
-            case _:
-                raise NotImplementedError(f"ContainmentConstraint.matches: unknown type {self}")
+        if self == ContainmentConstraint.SEARCH_BOX_ENCLOSES_OBJECT:
+            return candidate_box.inside(search_box)
+        elif self == ContainmentConstraint.SEARCH_BOX_OVERLAPS_OBJECT:
+            return candidate_box.touches(search_box)
+        else:
+            raise NotImplementedError(f"ContainmentConstraint.matches: unknown type {self}")
+
 
 @dataclass
 class SelectableObject:
@@ -73,7 +73,7 @@ class Instance(SelectableObject):
 
 @dataclass
 class MoveQuicklyToolSelection:
-    objects: List[Instance | ShapeOfInstance]
+    objects: List[Union[Instance, ShapeOfInstance]]
 
     def is_single_selection(self) -> bool:
         return len(self.objects) == 1
@@ -101,7 +101,7 @@ class MoveQuicklyToolSelection:
     def all_shapes_of_instance(self) -> List[ShapeOfInstance]:
         return [o for o in self.objects if isinstance(o, ShapeOfInstance)]
         
-    def as_transformees(self) -> List[pya.Instance | pya.Shape]:
+    def as_transformees(self) -> List[Union[pya.Instance, pya.Shape]]:
         tl = []
         tl += [o.instance for o in self.objects if isinstance(o, Instance)]
         for o in self.objects:
@@ -252,13 +252,15 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         if selection is None or \
            len(selection.objects) == 0:
             return "None"
-        def format_objects(singular: str, objects: List[Instance | ShapeOfInstance]):
+        def format_objects(singular: str, objects: List[Union[Instance, ShapeOfInstance]]):
             if objects is not None:
                 n = len(objects)
-                match n:
-                    case 0: return ''
-                    case 1: return f"1 {singular}"
-                    case _: return f"{n} {singular}s"
+                if n == 0:
+                    return ''
+                elif n == 1:
+                    return f"1 {singular}"
+                else:
+                    return f"{n} {singular}s"
             return ''
         
         instances = format_objects("instance", selection.all_instances())
@@ -273,7 +275,6 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
     def updateSelection(self, selection: Optional[MoveQuicklyToolSelection]):
         txt = self.format_selection(selection)
         self.selection_value.setText(f"<a href=\"show-properties\">{txt}</a>")
-        
         
         enabled = selection is not None
         self.x_value.setEnabled(enabled)
@@ -346,18 +347,18 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
     def keyPressEvent(self, event: pya.QKeyEvent):
         if Debugging.DEBUG:
             debug(f"SetupDock.key_event: key={event.key()}, buttons={event.modifiers}")
-        match event.key():
-            case pya.KeyCode.Enter | pya.KeyCode.Return:
-                if Debugging.DEBUG:
-                    debug("keyPressEvent: enter!")
-                    
-                orig_pos = self.host.selection.position(self.host.view).to_dtype(self.host.dbu)
-                op = TextMoveOperation(orig_pos,
-                                       self.x_value.value, self.y_value.value,
-                                       self.dx_value.value, self.dy_value.value)
-                self.host.commit_move(op)
-                event.accept()
-                return
+        key = event.key()
+        if key in (pya.KeyCode.Enter, pya.KeyCode.Return):
+            if Debugging.DEBUG:
+                debug("keyPressEvent: enter!")
+                
+            orig_pos = self.host.selection.position(self.host.view).to_dtype(self.host.dbu)
+            op = TextMoveOperation(orig_pos,
+                                   self.x_value.value, self.y_value.value,
+                                   self.dx_value.value, self.dy_value.value)
+            self.host.commit_move(op)
+            event.accept()
+            return
         super().keyPressEvent(event)
         
 
@@ -581,49 +582,55 @@ class MoveQuicklyToolPlugin(pya.Plugin):
         if self.selection is None:
             return
         
-        match self.state:
-            case MoveQuicklyToolState.INACTIVE | MoveQuicklyToolState.SELECTING | MoveQuicklyToolState.DRAG_SELECTING:
+        if self.state in (MoveQuicklyToolState.INACTIVE,
+                          MoveQuicklyToolState.SELECTING,
+                          MoveQuicklyToolState.DRAG_SELECTING):
+            return
+        elif self.state == MoveQuicklyToolState.MOVING:
+            if self.move_operation is None:
                 return
-            case MoveQuicklyToolState.MOVING:
-                if self.move_operation is None:
-                    return
-                
-                delta = self.move_operation.effective_delta()
-                
-                preview_box = self.selection.bbox(self.view).to_dtype(self.dbu).moved(delta)
-                
-                marker = pya.Marker(self.view)
-                marker.line_style     = 0
-                marker.line_width     = 2
-                marker.vertex_size    = 0 
-                marker.dither_pattern = 1
-                marker.set(preview_box)
-                self.move_preview_markers += [marker]
-                
-                # add texts
-                for o in self.selection.objects:
-                    if isinstance(o, ShapeOfInstance) and o.shape.is_text():
-                        text_marker = pya.Marker(self.view)
-                        dtext = o.shape.text.to_dtype(self.dbu).moved(delta)
-                        text_marker.set(dtext)
-                        self.move_preview_markers += [text_marker]
+            
+            delta = self.move_operation.effective_delta()
+            
+            preview_box = self.selection.bbox(self.view).to_dtype(self.dbu).moved(delta)
+            
+            marker = pya.Marker(self.view)
+            marker.line_style     = 0
+            marker.line_width     = 2
+            marker.vertex_size    = 0 
+            marker.dither_pattern = 1
+            marker.set(preview_box)
+            self.move_preview_markers += [marker]
+            
+            # add texts
+            for o in self.selection.objects:
+                if isinstance(o, ShapeOfInstance) and o.shape.is_text():
+                    text_marker = pya.Marker(self.view)
+                    dtext = o.shape.text.to_dtype(self.dbu).moved(delta)
+                    text_marker.set(dtext)
+                    self.move_preview_markers += [text_marker]
+        else:
+            raise NotImplementedError(f"update_move_preview_markers: unknown state {self.state}")
         
     def update_drag_selection_markers(self):
         self._clear_drag_selection_markers()
         
-        match self.state:
-            case MoveQuicklyToolState.INACTIVE | MoveQuicklyToolState.SELECTING | MoveQuicklyToolState.MOVING:
-                return
-            case MoveQuicklyToolState.DRAG_SELECTING:
-                selection_box = pya.DBox(self.drag_selection_from_dpoint, self.drag_selection_to_dpoint)
+        if self.state in (MoveQuicklyToolState.INACTIVE,
+                          MoveQuicklyToolState.SELECTING,
+                          MoveQuicklyToolState.MOVING):
+            return
+        elif self.state == MoveQuicklyToolState.DRAG_SELECTING:
+            selection_box = pya.DBox(self.drag_selection_from_dpoint, self.drag_selection_to_dpoint)
 
-                marker = pya.Marker(self.view)
-                marker.line_style     = 2
-                marker.line_width     = 2
-                marker.vertex_size    = 0 
-                marker.dither_pattern = 1
-                marker.set(selection_box)
-                self.drag_selection_markers += [marker]
+            marker = pya.Marker(self.view)
+            marker.line_style     = 2
+            marker.line_width     = 2
+            marker.vertex_size    = 0 
+            marker.dither_pattern = 1
+            marker.set(selection_box)
+            self.drag_selection_markers += [marker]
+        else:
+            raise NotImplementedError(f"update_drag_selection_markers: unknown state {self.state}")
         
     def visible_layer_indexes(self) -> List[int]:
         idxs = []
@@ -650,16 +657,18 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 
         selection_filter_options = SelectionFilterOptions.from_ui()
 
-        already_added_objects: Set[pya.Instance | pya.Shape] = set()
+        already_added_objects: Set[Union[pya.Instance, pya.Shape]] = set()
         selected_objects: List[pya.ObjectInstPath]
 
-        match selection_mode:
-            case pya.LayoutView.SelectionMode.Add:
-                selected_objects = self.view.object_selection
-                if self.selection:
-                    already_added_objects |= set(self.selection.as_transformees())
-            case pya.LayoutView.SelectionMode.Replace | pya.LayoutView.SelectionMode.Invert | _:  # TODO: treat invert properly
-                selected_objects = []
+        if selection_mode == pya.LayoutView.SelectionMode.Add:
+            selected_objects = self.view.object_selection
+            if self.selection:
+                already_added_objects |= set(self.selection.as_transformees())
+        elif selection_mode in (pya.LayoutView.SelectionMode.Replace,
+                                pya.LayoutView.SelectionMode.Invert):  # TODO: treat invert properly
+            selected_objects = []
+        else:
+            raise NotImplementedError(f"_select_objects: unknown SelectionMode {selection_mode}")
         
         text_info = None
         if 'TextInfo' in dir(pya):  # KLayout >= 0.30.5
@@ -730,7 +739,7 @@ class MoveQuicklyToolPlugin(pya.Plugin):
                             if len(iter.path()) == 0:
                                 sh = iter.shape()
                                 if selection_filter_options.include_shape(sh):
-                                    shape_box: BBox
+                                    shape_box: pya.Box
                                     if sh.is_text() and text_info is not None:
                                         shape_box = text_info.bbox(sh)
                                     else:
@@ -834,13 +843,16 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             #       clicking (select object) and moving without dragging will show the move preview
             
             if buttons & pya.ButtonState.LeftButton:  # drag selection
-                match self.state:
-                    case MoveQuicklyToolState.INACTIVE | MoveQuicklyToolState.SELECTING | MoveQuicklyToolState.MOVING:
-                        self.state = MoveQuicklyToolState.DRAG_SELECTING
-                        # NOTE: the from point is directly recorded via mouse_button_pressed_event, because some drag events could be skipped!
-                        self.drag_selection_to_dpoint = dpoint
-                    case MoveQuicklyToolState.DRAG_SELECTING:
-                        self.drag_selection_to_dpoint = dpoint
+                if self.state in (MoveQuicklyToolState.INACTIVE,
+                                  MoveQuicklyToolState.SELECTING,
+                                  MoveQuicklyToolState.MOVING):
+                    self.state = MoveQuicklyToolState.DRAG_SELECTING
+                    # NOTE: the from point is directly recorded via mouse_button_pressed_event, because some drag events could be skipped!
+                    self.drag_selection_to_dpoint = dpoint
+                elif self.state == MoveQuicklyToolState.DRAG_SELECTING:
+                    self.drag_selection_to_dpoint = dpoint
+                else:
+                    raise NotImplementedError(f"mouse_moved_event: unknown state {self.state}")
                 
                 if self.drag_selection_from_dpoint is None:
                     return False
@@ -903,53 +915,54 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self.drag_selection_to_dpoint = None
             return True
 
-        match self.state:
-            case MoveQuicklyToolState.INACTIVE:
-                pass
-            case MoveQuicklyToolState.SELECTING:
-                if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
-                    self.state = MoveQuicklyToolState.MOVING
-                    self.move_from_dpoint = dpoint
-                    return True                        
-            case MoveQuicklyToolState.DRAG_SELECTING:
-                self._clear_drag_selection_markers()
-                self.drag_selection_from_dpoint = None
-                self.drag_selection_to_dpoint = None
-                self.state = MoveQuicklyToolState.SELECTING
-                return True
-                
-            case MoveQuicklyToolState.MOVING:
-                pass
+        if self.state == MoveQuicklyToolState.INACTIVE:
+            pass
+        elif self.state == MoveQuicklyToolState.SELECTING:
+            if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
+                self.state = MoveQuicklyToolState.MOVING
+                self.move_from_dpoint = dpoint
+                return True                        
+        elif self.state == MoveQuicklyToolState.DRAG_SELECTING:
+            self._clear_drag_selection_markers()
+            self.drag_selection_from_dpoint = None
+            self.drag_selection_to_dpoint = None
+            self.state = MoveQuicklyToolState.SELECTING
+            return True
+        elif self.state == MoveQuicklyToolState.MOVING:
+            pass
+        else:
+            raise NotImplementedError(f"mouse_button_released_event: unknown state {self.state}")
                 
         return False
 
     def mouse_click_event(self, dpoint: pya.DPoint, buttons: int, prio: bool) -> bool:
         if prio:
             if buttons & pya.ButtonState.LeftButton:
-                match self.state:
-                    case MoveQuicklyToolState.INACTIVE:
-                        pass
-                    case MoveQuicklyToolState.SELECTING:
-                        if self.selection is None or buttons & pya.ButtonState.ShiftKey:
-                            self._clear_all_markers()
-                            self.select_object_at(dpoint, buttons)
-                            
-                        if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
-                            self.state = MoveQuicklyToolState.MOVING
-                            self.move_from_dpoint = dpoint
-                        if Debugging.DEBUG:
-                            debug(f"State {MoveQuicklyToolState.SELECTING} → self.state: selection={self.selection}, move_from_dpoint={self.move_from_dpoint}")
-                        return True                        
-                    case MoveQuicklyToolState.DRAG_SELECTING:
-                        pass
-                    case MoveQuicklyToolState.MOVING:
-                        if buttons & pya.ButtonState.ShiftKey:
-                            self.select_object_at(dpoint, buttons)
-                            self._clear_all_markers()
-                            self.state = MoveQuicklyToolState.SELECTING
-                        elif self.selection is not None:
-                            self.commit_move(self.move_operation)
-                        return True                        
+                if self.state == MoveQuicklyToolState.INACTIVE:
+                    pass
+                elif self.state == MoveQuicklyToolState.SELECTING:
+                    if self.selection is None or buttons & pya.ButtonState.ShiftKey:
+                        self._clear_all_markers()
+                        self.select_object_at(dpoint, buttons)
+                        
+                    if self.selection is not None and not buttons & pya.ButtonState.ShiftKey:
+                        self.state = MoveQuicklyToolState.MOVING
+                        self.move_from_dpoint = dpoint
+                    if Debugging.DEBUG:
+                        debug(f"State {MoveQuicklyToolState.SELECTING} → self.state: selection={self.selection}, move_from_dpoint={self.move_from_dpoint}")
+                    return True                        
+                elif self.state == MoveQuicklyToolState.DRAG_SELECTING:
+                    pass
+                elif self.state == MoveQuicklyToolState.MOVING:
+                    if buttons & pya.ButtonState.ShiftKey:
+                        self.select_object_at(dpoint, buttons)
+                        self._clear_all_markers()
+                        self.state = MoveQuicklyToolState.SELECTING
+                    elif self.selection is not None:
+                        self.commit_move(self.move_operation)
+                    return True                        
+                else:
+                    raise NotImplementedError(f"mouse_click_event: unknown state {self.state}")
             elif buttons in [pya.ButtonState.RightButton]:
                 self._clear_all_markers()
                 self.view.clear_selection()
@@ -971,25 +984,24 @@ class MoveQuicklyToolPlugin(pya.Plugin):
             self._clear_move_preview_markers()
             return True
                 
-        match key:
-            case pya.KeyCode.Tab:
-                if Debugging.DEBUG:
-                    debug("key_event: tab!")
-                if self.selection is not None:
-                    orig_pos = self.selection.position(self.view).to_dtype(self.dbu)
-                    self.setupDock.updatePositionValues(orig_pos.x,
-                                                        orig_pos.y,
-                                                        0.0, 0.0)
-                    self._clear_move_preview_markers()
-                    self.setupDock.navigateToNextTextField()
-                    return True
-                
-            case pya.KeyCode.Enter | pya.KeyCode.Return:
-                if Debugging.DEBUG:
-                    debug("key_event: enter!")
-                if self.selection is not None:
-                    self.commit_move()
-                    return True
+        if key == pya.KeyCode.Tab:
+            if Debugging.DEBUG:
+                debug("key_event: tab!")
+            if self.selection is not None:
+                orig_pos = self.selection.position(self.view).to_dtype(self.dbu)
+                self.setupDock.updatePositionValues(orig_pos.x,
+                                                    orig_pos.y,
+                                                    0.0, 0.0)
+                self._clear_move_preview_markers()
+                self.setupDock.navigateToNextTextField()
+                return True
+            
+        elif key in (pya.KeyCode.Enter, pya.KeyCode.Return):
+            if Debugging.DEBUG:
+                debug("key_event: enter!")
+            if self.selection is not None:
+                self.commit_move()
+                return True
                     
         return False
         
