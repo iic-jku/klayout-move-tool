@@ -276,7 +276,6 @@ class MoveQuicklyToolSetupWidget(pya.QWidget):
         txt = self.format_selection(selection)
         self.selection_value.setText(f"<a href=\"show-properties\">{txt}</a>")
         
-        
         enabled = selection is not None
         self.x_value.setEnabled(enabled)
         self.y_value.setEnabled(enabled)
