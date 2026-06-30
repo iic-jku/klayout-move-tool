@@ -23,6 +23,7 @@ from functools import cached_property
 from typing import *
 import os 
 import sys
+import traceback
 
 import pya
 
@@ -1073,7 +1074,7 @@ class MoveQuicklyToolPluginFactory(pya.PluginFactory):
         if Debugging.DEBUG:
             debug(f"MoveQuicklyToolPluginFactory.configure, name={name}, value={value}")
             
-        self._options_page.setup()
+        self._options_page.setup(self)
             
         return False
   

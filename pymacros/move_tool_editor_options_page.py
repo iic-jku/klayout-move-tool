@@ -29,45 +29,26 @@ Covers the three standard groups:
 Requires KLayout ≥ 0.30.4 (EditorOptionsPage introduced there).
 """
 
+import os
 import traceback
+from typing import *
 
 import pya
 
 from klayout_plugin_utils.editor_options import EditorOptions, EditGridKind, AngleMode
+
+# ---------------------------------------------------------------------------
+
+path_containing_this_script = os.path.realpath(os.path.dirname(__file__))
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _safe_get(dispatcher, key, default):
-    """get_config returns '' for unknown keys; guard and convert."""
-    try:
-        raw = dispatcher.get_config(key)
-        if raw == "" or raw is None:
-            return default
-        return raw
-    except Exception:
-        return default
-
-
-def _to_bool(v, default=False):
-    if isinstance(v, bool):
-        return v
-    s = str(v).strip().lower()
-    return s in ("true", "1", "yes") if s else default
-
-
 def _to_float(v, default=0.0):
     try:
         return float(v)
-    except (ValueError, TypeError):
-        return default
-
-
-def _to_int(v, default=0):
-    try:
-        return int(v)
     except (ValueError, TypeError):
         return default
 
@@ -92,77 +73,27 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
         # title, sort-index
         super().__init__(title, page_index)
 
-        # ------------------------------------------------------------------ #
-        # Build the widget tree                                                #
-        # ------------------------------------------------------------------ #
+        loader = pya.QUiLoader()
+        ui_path = os.path.join(path_containing_this_script, "MoveToolEditorOptions.ui")
+        ui_file = pya.QFile(ui_path)
+        try:
+            ui_file.open(pya.QFile.ReadOnly)
+            self.page = loader.load(ui_file, self)
+        finally:
+            ui_file.close()
+
         outer_layout = pya.QVBoxLayout(self)
-        outer_layout.setContentsMargins(4, 4, 4, 4)
-        outer_layout.setSpacing(4)
-
-        # ── Snapping group ─────────────────────────────────────────────────
-        snap_group = pya.QGroupBox("Snapping", self)
-        snap_layout = pya.QFormLayout(snap_group)
-        snap_layout.setContentsMargins(6, 6, 6, 6)
-        snap_layout.setSpacing(4)
-        snap_layout.setFieldGrowthPolicy(
-            pya.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        snap_layout.setLabelAlignment(pya.Qt.AlignmentFlag.AlignRight)
-
-        # Grid mode (combobox)
-        self._grid_mode = pya.QComboBox(snap_group)
-        self._grid_mode.addItem("No grid")            # index 0
-        self._grid_mode.addItem("Global grid")    # index 1
-        self._grid_mode.addItem("Other grid")    # index 2
-        snap_layout.addRow("Editor grid:", self._grid_mode)
-
-        # Custom grid value
-        self._grid_val = pya.QDoubleSpinBox(snap_group)
-        self._grid_val.setDecimals(3)
-        self._grid_val.setRange(0.0001, 10000.0)
-        self._grid_val.setSingleStep(0.005)
-        self._grid_val.setSuffix(" µm")
-        self._grid_val.setMinimumWidth(110)
-        snap_layout.addRow("Grid value:", self._grid_val)
-
-        # Snap-to-objects
-        self._snap_objects = pya.QCheckBox("Snap to other objects", snap_group)
-        snap_layout.addRow("Objects:", self._snap_objects)
-
-        outer_layout.addWidget(snap_group)
-
-        # ── Connection angle constraint ────────────────────────────────────
-        angle_group = pya.QGroupBox("Angle Constraints", self)
-        angle_layout = pya.QFormLayout(angle_group)
-        angle_layout.setContentsMargins(6, 6, 6, 6)
-        angle_layout.setSpacing(4)
-        angle_layout.setFieldGrowthPolicy(
-            pya.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        angle_layout.setLabelAlignment(pya.Qt.AlignmentFlag.AlignRight)
-
-        self._angle_mode = pya.QComboBox(angle_group)
-        self._angle_mode.addItem("Any angle")     # index 0
-        self._angle_mode.addItem("Diagonal")      # index 1
-        self._angle_mode.addItem("Manhattan")      # index 2
-        angle_layout.addRow("Connections:", self._angle_mode)
-
-        self._move_mode = pya.QComboBox(angle_group)
-        self._move_mode.addItem("Any direction")   # index 0
-        self._move_mode.addItem("Diagonal")        # index 1
-        self._move_mode.addItem("Manhattan")        # index 2
-        angle_layout.addRow("Movement:", self._move_mode)
-
-        outer_layout.addWidget(angle_group)
-        
-        outer_layout.addStretch(1)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(self.page)
 
         # ------------------------------------------------------------------ #
         # Wire signals → edited()                                              #
         # ------------------------------------------------------------------ #
-        self._grid_mode.currentIndexChanged(self._on_grid_mode_changed)
-        self._grid_val.editingFinished(self._on_edited)
-        self._snap_objects.stateChanged(self._on_edited)
-        self._angle_mode.currentIndexChanged(self._on_edited)
-        self._move_mode.currentIndexChanged(self._on_edited)
+        self.grid_cb.currentIndexChanged(self._on_grid_mode_changed)
+        self.edit_grid_le.editingFinished(self._on_edited)
+        self.snap_objects_cbx.stateChanged(self._on_edited)
+        self.snap_objects_to_grid_cbx.stateChanged(self._on_edited)
+        self.move_angle_cb.currentIndexChanged(self._on_edited)
 
         # Initial enable state
         self._update_grid_enable()
@@ -194,22 +125,19 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
             traceback.print_exc()
 
     def _update_grid_enable(self):
-        mode = self._grid_mode.currentIndex
+        mode = self.grid_cb.currentIndex
         custom = (mode == 2)
-        self._grid_val.setEnabled(custom)
+        self.edit_grid_le.setEnabled(custom)
         # When not custom, show the effective value (global grid or 0 for off)
         if mode == 0:
-            self._grid_val.setValue(0.0)
-            self._grid_val.setSpecialValueText("(none)")
-            self._grid_val.setMinimum(0.0)
+            self.edit_grid_le.setText('')
+            self.edit_grid_le.setPlaceholderText('(none)')
         elif mode == 1:
-            self._grid_val.setMinimum(0.0)
             eo = self.editor_options
-            self._grid_val.setValue(eo.global_grid)
-            self._grid_val.setSpecialValueText("")
+            self.edit_grid_le.setText(f"{eo.global_grid:.3f}")
+            self.edit_grid_le.setPlaceholderText('')
         else:
-            self._grid_val.setMinimum(0.0001)
-            self._grid_val.setSpecialValueText("")
+            self.edit_grid_le.setPlaceholderText('')
 
     # ------------------------------------------------------------------ #
     # EditorOptionsPage virtual methods                                    #
@@ -220,28 +148,20 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
 
         eo = self.editor_options
         if eo.edit_grid_kind == EditGridKind.NONE:
-            self._grid_mode.currentIndex = 0
+            self.grid_cb.currentIndex = 0
         elif eo.edit_grid_kind == EditGridKind.GLOBAL:
-            self._grid_mode.currentIndex = 1
+            self.grid_cb.currentIndex = 1
         elif eo.edit_grid_kind == EditGridKind.OTHER:
-            self._grid_mode.currentIndex = 2
+            self.grid_cb.currentIndex = 2
         else:
             raise NotImplementedError(f"Unexpected EditGridKind enum case: {eo.edit_grid_kind}")
 
         # Set the custom value; _update_grid_enable will override display
         # for off/global modes
-        self._grid_val.setValue(eo.edit_grid_value or 0.005)
+        self.edit_grid_le.setText(f"{_to_float(eo.edit_grid_value, 0.005):.3f}")
 
-        self._snap_objects.setChecked(eo.edit_snap_objects_to_grid)
-
-        conn_angle_mode_index = 0
-        if eo.edit_connect_angle_mode == AngleMode.ANY_ANGLE:
-            conn_angle_mode_index = 0
-        elif eo.edit_connect_angle_mode == AngleMode.DIAGONAL:
-            conn_angle_mode_index = 1
-        elif eo.edit_connect_angle_mode == AngleMode.MANHATTAN:
-            conn_angle_mode_index = 2
-        self._angle_mode.currentIndex = min(conn_angle_mode_index, 2)
+        self.snap_objects_cbx.setChecked(eo.edit_snap_to_objects)
+        self.snap_objects_to_grid_cbx.setChecked(eo.edit_snap_objects_to_grid)
 
         move_angle_mode_idx = 0
         if eo.edit_move_angle_mode == AngleMode.ANY_ANGLE:
@@ -250,7 +170,7 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
             move_angle_mode_idx = 1
         elif eo.edit_move_angle_mode == AngleMode.MANHATTAN:
             move_angle_mode_idx = 2
-        self._move_mode.currentIndex = min(move_angle_mode_idx, 2)
+        self.move_angle_cb.currentIndex = min(move_angle_mode_idx, 2)
 
         self._update_grid_enable()
 
@@ -263,27 +183,26 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
 
         eo = EditorOptions(lv)
     
-        grid_idx = self._grid_mode.currentIndex
+        grid_idx = self.grid_cb.currentIndex
         if grid_idx == 0:
             eo.set_edit_grid_kind(EditGridKind.NONE)
         elif grid_idx == 1:
             eo.set_edit_grid_kind(EditGridKind.GLOBAL)
         elif grid_idx == 2:
             eo.set_edit_grid_kind(EditGridKind.OTHER)
-            gv = self._grid_val.value
+            gv = _to_float(self.edit_grid_le.text, 0.005)
             eo.set_edit_grid_value(gv)
 
-        eo.set_edit_snap_objects_to_grid(self._snap_objects.isChecked())
-
+        eo.set_edit_snap_to_objects(self.snap_objects_cbx.isChecked())
+        eo.set_edit_snap_objects_to_grid(self.snap_objects_to_grid_cbx.isChecked())
+        
         angle_dict = {
             0: AngleMode.ANY_ANGLE,
             1: AngleMode.DIAGONAL,
             2: AngleMode.MANHATTAN,
         }
         
-        connect_angle_mode = angle_dict.get(self._angle_mode.currentIndex, AngleMode.ANY_ANGLE)
-        move_angle_mode = angle_dict.get(self._move_mode.currentIndex, AngleMode.ANY_ANGLE)
-        eo.set_edit_connect_angle_mode(connect_angle_mode)
+        move_angle_mode = angle_dict.get(self.move_angle_cb.currentIndex, AngleMode.ANY_ANGLE)
         eo.set_edit_move_angle_mode(move_angle_mode)
 
         eo.save()
