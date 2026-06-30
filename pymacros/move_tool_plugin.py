@@ -33,6 +33,8 @@ from klayout_plugin_utils.object_description import describe_object
 from klayout_plugin_utils.selection_filter_options import SelectionFilterOptions
 from klayout_plugin_utils.str_enum_compat import StrEnum
 
+from move_tool_editor_options_page import MoveToolEditorOptionsPage
+
 
 class MoveQuicklyToolState(StrEnum):
     INACTIVE = "inactive"
@@ -1046,7 +1048,34 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 class MoveQuicklyToolPluginFactory(pya.PluginFactory):
     def __init__(self):
         super().__init__()
+        self._options_page = None
         self.register(-1000, "Move Quickly Tool", "Move Quickly (M)", ':move_24px')
+  
+    def create_editor_options_pages(self):
+        if Debugging.DEBUG:
+            debug("MoveQuicklyToolPluginFactory.create_editor_options_pages")
+        try:
+            self._options_page = MoveToolEditorOptionsPage("Move Quickly Tool Options", 0)
+            self.add_editor_options_page(self._options_page)
+            pass
+        except Exception as e:
+            print(f"ERROR: MoveQuicklyToolPluginFactory failed to register editor options page due to exception: {e}")
+            traceback.print_exc()
+            return
+  
+    def configure(self, name: str, value: str) -> bool:
+        if self._options_page is None:
+            return
+            
+        if name not in EditorOptions.watched_config_keys():
+            return
+            
+        if Debugging.DEBUG:
+            debug(f"MoveQuicklyToolPluginFactory.configure, name={name}, value={value}")
+            
+        self._options_page.setup()
+            
+        return False
   
     def create_plugin(self, manager, root, view):
         return MoveQuicklyToolPlugin(view)
