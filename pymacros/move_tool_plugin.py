@@ -1049,20 +1049,17 @@ class MoveQuicklyToolPlugin(pya.Plugin):
 class MoveQuicklyToolPluginFactory(pya.PluginFactory):
     def __init__(self):
         super().__init__()
-        self._options_page = None
         self.register(-1000, "Move Quickly Tool", "Move Quickly (M)", ':move_24px')
   
     def create_editor_options_pages(self):
         if Debugging.DEBUG:
             debug("MoveQuicklyToolPluginFactory.create_editor_options_pages")
         try:
-            self._options_page = MoveToolEditorOptionsPage("Move Quickly Tool Options", 0)
-            self.add_editor_options_page(self._options_page)
-            pass
+            options_page = MoveToolEditorOptionsPage("Move Quickly Tool Options", 0)
+            self.add_editor_options_page(options_page)
         except Exception as e:
             print(f"ERROR: MoveQuicklyToolPluginFactory failed to register editor options page due to exception: {e}")
             traceback.print_exc()
-            return
   
     def configure(self, name: str, value: str) -> bool:
         if self._options_page is None:
