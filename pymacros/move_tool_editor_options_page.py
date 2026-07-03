@@ -99,10 +99,10 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
         self._update_grid_enable()
 
     @property
-    def editor_options(self) -> EditorOptions:
+    def editor_options(self) -> Optional[EditorOptions]:
         lv = pya.LayoutView.current()
         if lv is None:
-            return
+            return None
 
         eo = EditorOptions(lv)
         return eo
@@ -113,7 +113,7 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
 
     def _on_edited(self, *_):
         try:
-            self.edited()   # signal KLayout to call apply()
+                self.edited()   # signal KLayout to call apply()
         except Exception as e:
             traceback.print_exc()
 
@@ -134,6 +134,8 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
             self.edit_grid_le.setPlaceholderText('(none)')
         elif mode == 1:
             eo = self.editor_options
+            if eo is None:
+                return
             self.edit_grid_le.setText(f"{eo.global_grid:.3f}")
             self.edit_grid_le.setPlaceholderText('')
         else:
@@ -147,6 +149,8 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
         """Transfer configuration → widgets."""
 
         eo = self.editor_options
+        if eo is None:
+            return
         if eo.edit_grid_kind == EditGridKind.NONE:
             self.grid_cb.currentIndex = 0
         elif eo.edit_grid_kind == EditGridKind.GLOBAL:
