@@ -536,8 +536,22 @@ class MoveQuicklyToolPlugin(pya.Plugin):
     def configure(self, name: str, value: str) -> bool:
         if Debugging.DEBUG:
             debug(f"MoveQuicklyToolPlugin.configure, name={name}, value={value}")
+        
+        if name not in EditorOptions.watched_config_keys():
+            return False
+        
         if self.editor_options is not None:
             self.editor_options.plugin_configure(name, value)
+        
+        for p in self.editor_options_pages():
+            if not isinstance(p, MoveToolEditorOptionsPage):
+                continue
+            
+            if Debugging.DEBUG:
+                debug(f"MoveQuicklyToolPlugin.configure, name={name}, value={value}")
+            
+            p.setup(self)
+            
         return False
         
     def menu_activated(self, symbol: str) -> bool:
@@ -1060,20 +1074,6 @@ class MoveQuicklyToolPluginFactory(pya.PluginFactory):
         except Exception as e:
             print(f"ERROR: MoveQuicklyToolPluginFactory failed to register editor options page due to exception: {e}")
             traceback.print_exc()
-  
-    def configure(self, name: str, value: str) -> bool:
-        if self._options_page is None:
-            return
-            
-        if name not in EditorOptions.watched_config_keys():
-            return
-            
-        if Debugging.DEBUG:
-            debug(f"MoveQuicklyToolPluginFactory.configure, name={name}, value={value}")
-            
-        self._options_page.setup(self)
-            
-        return False
   
     def create_plugin(self, manager, root, view):
         return MoveQuicklyToolPlugin(view)
