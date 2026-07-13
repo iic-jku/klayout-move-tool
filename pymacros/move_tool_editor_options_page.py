@@ -47,9 +47,12 @@ path_containing_this_script = os.path.realpath(os.path.dirname(__file__))
 # ---------------------------------------------------------------------------
 
 def _to_float(v, default=0.0):
-    try:
+    if isinstance(v, (int, float)):
         return float(v)
-    except (ValueError, TypeError):
+    if isinstance(v, str):
+        v = v.strip()
+        if v.replace('.', '', 1).replace('-', '', 1).replace('+', '', 1).isdigit():
+        return float(v)
         return default
 
 
