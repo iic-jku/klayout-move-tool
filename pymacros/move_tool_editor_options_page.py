@@ -41,10 +41,23 @@ from klayout_plugin_utils.editor_options import EditorOptions, EditGridKind, Ang
 
 path_containing_this_script = os.path.realpath(os.path.dirname(__file__))
 
+# as we had crashes when connecting UI signals to the MoveToolEditorOptionsPage,
+# we keep the pages alive here
+_live_pages = {}
+_next_page_id = 0
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _make_safe_callback(page_id, method_name):
+    """Closure captures only an int and a string — no Python objects."""
+    def callback(*args):
+        obj = _live_pages.get(page_id)
+        if obj is not None:
+            getattr(obj, method_name)(*args)
+    return callback
+
 
 def _to_float(v, default=0.0):
     if isinstance(v, (int, float)):
@@ -52,9 +65,9 @@ def _to_float(v, default=0.0):
     if isinstance(v, str):
         v = v.strip()
         if v.replace('.', '', 1).replace('-', '', 1).replace('+', '', 1).isdigit():
-        return float(v)
-        return default
-
+            return float(v)
+    return default
+    
 
 # ---------------------------------------------------------------------------
 # Main page class
@@ -73,9 +86,20 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
         Tab ordering – place right after the built-in Basic page (index 0).
         Use a high index (e.g. 100) to append at the end instead.
         """
-        # title, sort-index
+        
+        global _next_page_id
+        
         super().__init__(title, page_index)
 
+        # Clean up destroyed pages
+        dead_ids = [pid for pid, page in _live_pages.items() if page._destroyed()]
+        for pid in dead_ids:
+            del _live_pages[pid]
+        
+        self._page_id = _next_page_id
+        _next_page_id += 1
+        _live_pages[self._page_id] = self
+                
         loader = pya.QUiLoader()
         ui_path = os.path.join(path_containing_this_script, "MoveToolEditorOptions.ui")
         ui_file = pya.QFile(ui_path)
@@ -92,11 +116,13 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
         # ------------------------------------------------------------------ #
         # Wire signals → edited()                                              #
         # ------------------------------------------------------------------ #
-        self.grid_cb.currentIndexChanged(self._on_grid_mode_changed)
-        self.edit_grid_le.editingFinished(self._on_edited)
-        self.snap_objects_cbx.stateChanged(self._on_edited)
-        self.snap_objects_to_grid_cbx.stateChanged(self._on_edited)
-        self.move_angle_cb.currentIndexChanged(self._on_edited)
+        
+        pid = self._page_id
+        self.page.grid_cb.currentIndexChanged(_make_safe_callback(pid, '_on_grid_mode_changed'))
+        self.page.edit_grid_le.editingFinished(_make_safe_callback(pid, '_on_edited'))
+        self.page.snap_objects_cbx.stateChanged(_make_safe_callback(pid, '_on_edited'))
+        self.page.snap_objects_to_grid_cbx.stateChanged(_make_safe_callback(pid, '_on_edited'))
+        self.page.move_angle_cb.currentIndexChanged(_make_safe_callback(pid, '_on_edited'))
 
         # Initial enable state
         self._update_grid_enable()
@@ -116,7 +142,7 @@ class MoveToolEditorOptionsPage(pya.EditorOptionsPage):
 
     def _on_edited(self, *_):
         try:
-                self.edited()   # signal KLayout to call apply()
+            self.edited()   # signal KLayout to call apply()
         except Exception as e:
             traceback.print_exc()
 
