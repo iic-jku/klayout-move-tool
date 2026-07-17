@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# SPDX-FileCopyrightText: 2025 Martin Jan Köhler
+# SPDX-FileCopyrightText: 2025-2026 Martin Jan Köhler
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
